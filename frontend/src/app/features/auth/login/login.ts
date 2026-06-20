@@ -1,6 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink, ActivatedRoute } from '@angular/router';
+import { AuthService } from '../../../core/services/auth';
 
 @Component({
   selector: 'app-login',
@@ -9,13 +10,31 @@ import { RouterLink } from '@angular/router';
   styleUrl: './login.scss',
 })
 export class Login {
-  email = '';
+  private readonly auth  = inject(AuthService);
+  private readonly router = inject(Router);
+  private readonly route  = inject(ActivatedRoute);
+
+  email    = '';
   password = '';
-  loading = false;
+  loading  = false;
+  error    = '';
 
   onSubmit() {
     if (!this.email || !this.password) return;
     this.loading = true;
-    // TODO: inject AuthService and call login()
+    this.error   = '';
+
+    this.auth.login({ email: this.email, password: this.password }).subscribe({
+      next: () => {
+        const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl') ?? '/feed';
+        this.router.navigateByUrl(returnUrl);
+      },
+      error: (err) => {
+        this.loading = false;
+        this.error = err.status === 401
+          ? 'Email ou mot de passe incorrect.'
+          : 'Une erreur est survenue. Réessayez.';
+      },
+    });
   }
 }
