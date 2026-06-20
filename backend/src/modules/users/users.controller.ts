@@ -10,17 +10,20 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get('me')
-  getMe(@CurrentUser() user: any) {
-    return this.usersService.findById(user.userId);
+  async getMe(@CurrentUser() user: any) {
+    const { password: _pw, ...result } = await this.usersService.findById(user.userId) as any;
+    return result;
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.usersService.findById(id);
+  async findOne(@Param('id') id: string) {
+    const { password: _pw, ...result } = await this.usersService.findById(id) as any;
+    return result;
   }
 
   @Patch('me')
-  update(@CurrentUser() user: any, @Body() dto: UpdateUserDto) {
-    return this.usersService.update(user.userId, dto);
+  async update(@CurrentUser() user: any, @Body() dto: UpdateUserDto) {
+    const { password: _pw, ...result } = await this.usersService.update(user.userId, dto) as any;
+    return result;
   }
 }

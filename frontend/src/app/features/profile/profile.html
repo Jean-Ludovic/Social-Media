@@ -1,23 +1,133 @@
 <div class="max-w-3xl mx-auto py-8 px-4">
-  <!-- Cover + Avatar -->
-  <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
-    <div class="h-36 bg-gradient-to-r from-indigo-500 to-purple-600"></div>
-    <div class="px-6 pb-6">
-      <div class="flex items-end justify-between -mt-10 mb-4">
-        <div class="w-20 h-20 rounded-2xl border-4 border-white bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-2xl shadow-md">JL</div>
-        <button class="btn-secondary text-sm">Modifier le profil</button>
-      </div>
-      <h2 class="text-xl font-bold text-gray-900">Jean-Ludovic</h2>
-      <p class="text-gray-500 text-sm mt-1">Passionné de tech, débats et nouvelles idées 🚀</p>
-      <div class="flex items-center gap-6 mt-4 text-sm">
-        <span><strong class="text-gray-900">128</strong> <span class="text-gray-500">Amis</span></span>
-        <span><strong class="text-gray-900">47</strong> <span class="text-gray-500">Abonnés</span></span>
-        <span><strong class="text-gray-900">32</strong> <span class="text-gray-500">Publications</span></span>
+
+  <!-- Loading -->
+  @if (loading()) {
+    <div class="flex items-center justify-center py-24">
+      <div class="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+    </div>
+  }
+
+  <!-- Error -->
+  @else if (error()) {
+    <div class="card text-center py-12">
+      <svg class="w-10 h-10 text-gray-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+      </svg>
+      <p class="text-gray-400 text-sm">{{ error() }}</p>
+    </div>
+  }
+
+  <!-- Profile -->
+  @else if (profile(); as p) {
+
+    <!-- Header card -->
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
+
+      <!-- Cover -->
+      <div class="h-36 bg-gradient-to-r from-indigo-500 to-purple-600"></div>
+
+      <div class="px-6 pb-6">
+
+        <!-- Avatar row -->
+        <div class="flex items-end justify-between -mt-10 mb-4">
+
+          <!-- Avatar -->
+          @if (p.avatarUrl) {
+            <img [src]="p.avatarUrl" alt="avatar"
+                 class="w-20 h-20 rounded-2xl border-4 border-white shadow-md object-cover" />
+          } @else {
+            <div class="w-20 h-20 rounded-2xl border-4 border-white bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-2xl shadow-md">
+              {{ initials() }}
+            </div>
+          }
+
+          <!-- Owner button -->
+          @if (isOwner()) {
+            @if (!editing()) {
+              <button (click)="startEdit()" class="btn-secondary text-sm">
+                <span class="flex items-center gap-1.5">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                  </svg>
+                  Modifier le profil
+                </span>
+              </button>
+            }
+          }
+        </div>
+
+        <!-- View mode -->
+        @if (!editing()) {
+          <h2 class="text-xl font-bold text-gray-900">{{ p.displayName }}</h2>
+          <p class="text-xs text-gray-400 mt-0.5">{{ p.email }}</p>
+          @if (p.bio) {
+            <p class="text-gray-500 text-sm mt-2">{{ p.bio }}</p>
+          } @else if (isOwner()) {
+            <p class="text-gray-400 text-sm mt-2 italic">Ajoutez une bio pour vous présenter.</p>
+          }
+          <div class="flex items-center gap-6 mt-4 text-sm border-t border-gray-50 pt-4">
+            <span><strong class="text-gray-900">0</strong> <span class="text-gray-500">Amis</span></span>
+            <span><strong class="text-gray-900">0</strong> <span class="text-gray-500">Abonnés</span></span>
+            <span><strong class="text-gray-900">0</strong> <span class="text-gray-500">Publications</span></span>
+          </div>
+        }
+
+        <!-- Edit mode -->
+        @if (editing()) {
+          <form (ngSubmit)="saveEdit()" class="space-y-4 mt-1">
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1.5">Nom d'affichage</label>
+              <input type="text" name="displayName" [(ngModel)]="editForm.displayName" required
+                     class="input-field text-sm" placeholder="Ton nom public" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1.5">Bio</label>
+              <textarea name="bio" [(ngModel)]="editForm.bio" rows="3"
+                        class="input-field text-sm resize-none"
+                        placeholder="Décris-toi en quelques mots..."></textarea>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1.5">URL de l'avatar</label>
+              <input type="url" name="avatarUrl" [(ngModel)]="editForm.avatarUrl"
+                     class="input-field text-sm" placeholder="https://exemple.com/photo.jpg" />
+              @if (editForm.avatarUrl) {
+                <img [src]="editForm.avatarUrl" alt="prévisualisation"
+                     class="mt-2 w-14 h-14 rounded-xl object-cover border border-gray-200" />
+              }
+            </div>
+
+            @if (editError) {
+              <div class="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
+                {{ editError }}
+              </div>
+            }
+
+            <div class="flex gap-3 pt-1">
+              <button type="submit" [disabled]="saving()" class="btn-primary text-sm">
+                @if (saving()) { Sauvegarde... } @else { Sauvegarder }
+              </button>
+              <button type="button" (click)="cancelEdit()" class="btn-secondary text-sm">
+                Annuler
+              </button>
+            </div>
+
+          </form>
+        }
+
       </div>
     </div>
-  </div>
-  <!-- Placeholder -->
-  <div class="card text-center py-10 text-gray-400">
-    <p class="text-sm">Les publications du profil s'afficheront ici.</p>
-  </div>
+
+    <!-- Posts placeholder -->
+    <div class="card text-center py-10 text-gray-400">
+      <svg class="w-8 h-8 mx-auto mb-2 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+      </svg>
+      <p class="text-sm">Les publications s'afficheront ici.</p>
+    </div>
+
+  }
+
 </div>
