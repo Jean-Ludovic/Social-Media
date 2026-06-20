@@ -1,46 +1,133 @@
 <div class="max-w-3xl mx-auto py-8 px-4 space-y-5">
+
+  <!-- Header -->
   <div class="flex items-center justify-between">
     <h2 class="text-2xl font-bold text-gray-900">Débats</h2>
-    <button class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors flex items-center gap-2">
-      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /></svg>
-      Nouveau débat
+    <button (click)="toggleComposer()"
+            class="text-sm font-medium px-4 py-2 rounded-xl transition-colors flex items-center gap-2"
+            [class.bg-indigo-600]="!showComposer()" [class.hover:bg-indigo-700]="!showComposer()" [class.text-white]="!showComposer()"
+            [class.bg-gray-100]="showComposer()" [class.hover:bg-gray-200]="showComposer()" [class.text-gray-700]="showComposer()">
+      @if (!showComposer()) {
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
+        Nouveau débat
+      } @else {
+        Annuler
+      }
     </button>
   </div>
 
-  @for (debate of debates; track debate.id) {
-    <div class="card cursor-pointer hover:shadow-md transition-shadow">
-      <div class="flex items-start gap-3">
-        <div class="w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-xs shrink-0" [style.background]="debate.authorColor">{{ debate.authorInitials }}</div>
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2 mb-1">
-            <span class="text-sm font-medium text-gray-700">{{ debate.author }}</span>
-            <span class="text-xs text-gray-400">· {{ debate.time }}</span>
+  <!-- Composer -->
+  @if (showComposer()) {
+    <div class="card">
+      <h3 class="font-semibold text-gray-800 mb-4">Créer un débat</h3>
+      <form (ngSubmit)="submitDebate()" class="space-y-4">
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">Question</label>
+          <textarea name="newQuestion" [(ngModel)]="newQuestion" rows="2"
+                    class="input-field text-sm resize-none"
+                    placeholder="Posez votre question de débat..."></textarea>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-indigo-600 mb-1.5">Position A</label>
+            <input type="text" name="sideA" [(ngModel)]="sideA"
+                   class="input-field text-sm" placeholder="Pour" />
           </div>
-          <h3 class="font-semibold text-gray-900 text-base leading-snug">{{ debate.question }}</h3>
-          <!-- Vote bars -->
-          <div class="mt-4 space-y-2">
-            @for (side of debate.sides; track side.label; let i = $index) {
-              <div>
-                <div class="flex items-center justify-between mb-1">
-                  <span class="text-sm font-medium" [class.text-indigo-700]="i===0" [class.text-orange-600]="i===1">{{ side.label }}</span>
-                  <span class="text-xs text-gray-500">{{ side.pct }}%</span>
-                </div>
-                <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div class="h-full rounded-full transition-all"
-                       [style.width]="side.pct + '%'"
-                       [class.bg-indigo-500]="i===0"
-                       [class.bg-orange-500]="i===1"></div>
-                </div>
-              </div>
-            }
-          </div>
-          <div class="flex items-center gap-4 mt-4 text-xs text-gray-500">
-            <span>{{ debate.totalVotes }} votes</span>
-            <span>{{ debate.comments }} commentaires</span>
-            <span class="ml-auto px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-full font-medium">{{ debate.category }}</span>
+          <div>
+            <label class="block text-sm font-medium text-orange-500 mb-1.5">Position B</label>
+            <input type="text" name="sideB" [(ngModel)]="sideB"
+                   class="input-field text-sm" placeholder="Contre" />
           </div>
         </div>
-      </div>
+
+        @if (postError) {
+          <div class="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{{ postError }}</div>
+        }
+
+        <div class="flex gap-3">
+          <button type="submit" [disabled]="posting()" class="btn-primary text-sm">
+            @if (posting()) { Création... } @else { Créer le débat }
+          </button>
+          <button type="button" (click)="toggleComposer()" class="btn-secondary text-sm">Annuler</button>
+        </div>
+
+      </form>
     </div>
   }
+
+  <!-- Loading -->
+  @if (loading()) {
+    <div class="flex items-center justify-center py-16">
+      <div class="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+    </div>
+  }
+
+  <!-- Error -->
+  @else if (error()) {
+    <div class="card text-center py-10">
+      <p class="text-gray-400 text-sm mb-3">{{ error() }}</p>
+      <button (click)="loadDebates()" class="btn-secondary text-sm">Réessayer</button>
+    </div>
+  }
+
+  <!-- Empty -->
+  @else if (debates().length === 0) {
+    <div class="card text-center py-12 text-gray-400">
+      <svg class="w-10 h-10 mx-auto mb-3 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
+      </svg>
+      <p class="text-sm">Aucun débat pour l'instant.<br>Lancez la conversation !</p>
+    </div>
+  }
+
+  <!-- Debates list -->
+  @else {
+    @for (debate of debates(); track debate.id) {
+      <div class="card cursor-pointer hover:shadow-md transition-shadow" (click)="openDetail(debate.id)">
+        <div class="flex items-start gap-3">
+
+          <div class="w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-xs shrink-0"
+               [style.background]="avatarColor(debate.authorId)">{{ initials(debate.authorName) }}</div>
+
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-sm font-medium text-gray-700">{{ debate.authorName }}</span>
+              <span class="text-xs text-gray-400">· {{ formatTime(debate.createdAt) }}</span>
+            </div>
+
+            <h3 class="font-semibold text-gray-900 text-base leading-snug">{{ debate.question }}</h3>
+
+            <!-- Vote bars -->
+            <div class="mt-4 space-y-2">
+              @for (side of debate.sides; track side.id; let i = $index) {
+                <div>
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-sm font-medium"
+                          [class.text-indigo-700]="i===0" [class.text-orange-600]="i===1">{{ side.label }}</span>
+                    <span class="text-xs text-gray-500">{{ pct(side, debate) }}%</span>
+                  </div>
+                  <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div class="h-full rounded-full transition-all"
+                         [style.width]="pct(side, debate) + '%'"
+                         [class.bg-indigo-500]="i===0"
+                         [class.bg-orange-500]="i===1"></div>
+                  </div>
+                </div>
+              }
+            </div>
+
+            <p class="mt-3 text-xs text-gray-400">
+              {{ totalVotes(debate) }} vote{{ totalVotes(debate) > 1 ? 's' : '' }}
+            </p>
+          </div>
+
+        </div>
+      </div>
+    }
+  }
+
 </div>

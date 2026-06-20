@@ -1,27 +1,103 @@
 <div class="max-w-3xl mx-auto py-8 px-4 space-y-6">
-  <div class="card">
-    <h2 class="text-xl font-bold text-gray-900 mb-4">L'intelligence artificielle va-t-elle remplacer les développeurs d'ici 10 ans ?</h2>
-    <div class="space-y-3">
-      @for (side of sides; track side.label; let i = $index) {
-        <button class="w-full text-left p-4 rounded-xl border-2 hover:border-indigo-400 transition-colors"
-                [class.border-indigo-500]="i===0" [class.bg-indigo-50]="i===0"
-                [class.border-orange-500]="i===1" [class.bg-orange-50]="i===1">
-          <div class="flex items-center justify-between mb-2">
-            <span class="font-semibold" [class.text-indigo-700]="i===0" [class.text-orange-600]="i===1">{{ side.label }}</span>
-            <span class="text-sm font-bold" [class.text-indigo-600]="i===0" [class.text-orange-500]="i===1">{{ side.pct }}%</span>
-          </div>
-          <div class="h-2 bg-white rounded-full overflow-hidden">
-            <div class="h-full rounded-full" [style.width]="side.pct+'%'"
-                 [class.bg-indigo-500]="i===0" [class.bg-orange-500]="i===1"></div>
-          </div>
-          <p class="text-xs text-gray-500 mt-2">{{ side.votes }} votes</p>
-        </button>
-      }
+
+  <!-- Loading -->
+  @if (loading()) {
+    <div class="flex items-center justify-center py-24">
+      <div class="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
     </div>
-    <p class="text-center text-sm text-gray-400 mt-4">342 votes · 67 commentaires</p>
-  </div>
-  <div class="card">
-    <h3 class="font-semibold text-gray-800 mb-3">Commentaires <span class="text-gray-400 font-normal text-sm">(67)</span></h3>
-    <p class="text-sm text-gray-400 text-center py-6">Les commentaires s'afficheront ici.</p>
-  </div>
+  }
+
+  <!-- Error -->
+  @else if (error()) {
+    <div class="card text-center py-12">
+      <p class="text-gray-400 text-sm">{{ error() }}</p>
+    </div>
+  }
+
+  <!-- Debate -->
+  @else if (debate(); as d) {
+
+    <!-- Question + votes -->
+    <div class="card">
+
+      <!-- Author -->
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-xs shrink-0"
+             [style.background]="avatarColor(d.authorId)">{{ initials(d.authorName) }}</div>
+        <div>
+          <p class="text-sm font-medium text-gray-800">{{ d.authorName }}</p>
+          <p class="text-xs text-gray-400">{{ formatTime(d.createdAt) }}</p>
+        </div>
+      </div>
+
+      <h2 class="text-xl font-bold text-gray-900 mb-6">{{ d.question }}</h2>
+
+      <!-- Vote prompt / result label -->
+      @if (!votedSideId()) {
+        <p class="text-sm text-gray-500 mb-3">
+          @if (voting()) { Vote en cours... } @else { Choisissez votre position : }
+        </p>
+      } @else {
+        <p class="text-sm text-indigo-600 font-medium mb-3">Merci pour votre vote ! Voici les résultats :</p>
+      }
+
+      <!-- Sides -->
+      <div class="space-y-3">
+        @for (side of d.sides; track side.id; let i = $index) {
+          <button (click)="vote(side.id)"
+                  [disabled]="!!votedSideId() || voting()"
+                  class="w-full text-left p-4 rounded-xl border-2 transition-all duration-200 disabled:cursor-default"
+                  [class.border-indigo-500]="i===0"
+                  [class.bg-indigo-50]="i===0"
+                  [class.border-orange-500]="i===1"
+                  [class.bg-orange-50]="i===1"
+                  [class.opacity-50]="votedSideId() !== null && votedSideId() !== side.id"
+                  [class.ring-2]="votedSideId() === side.id"
+                  [class.ring-indigo-400]="votedSideId() === side.id && i===0"
+                  [class.ring-orange-400]="votedSideId() === side.id && i===1">
+
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-semibold flex items-center gap-2"
+                    [class.text-indigo-700]="i===0" [class.text-orange-600]="i===1">
+                {{ side.label }}
+                @if (votedSideId() === side.id) {
+                  <span class="text-xs font-normal bg-white px-2 py-0.5 rounded-full border"
+                        [class.text-indigo-600]="i===0" [class.border-indigo-200]="i===0"
+                        [class.text-orange-500]="i===1" [class.border-orange-200]="i===1">
+                    Mon vote
+                  </span>
+                }
+              </span>
+              <span class="text-sm font-bold" [class.text-indigo-600]="i===0" [class.text-orange-500]="i===1">
+                {{ pct(side) }}%
+              </span>
+            </div>
+
+            <div class="h-2 bg-white rounded-full overflow-hidden">
+              <div class="h-full rounded-full transition-all duration-500"
+                   [style.width]="pct(side) + '%'"
+                   [class.bg-indigo-500]="i===0" [class.bg-orange-500]="i===1"></div>
+            </div>
+
+            <p class="text-xs text-gray-500 mt-2">
+              {{ side.votesCount }} vote{{ side.votesCount > 1 ? 's' : '' }}
+            </p>
+          </button>
+        }
+      </div>
+
+      <p class="text-center text-sm text-gray-400 mt-4">
+        {{ totalVotes() }} vote{{ totalVotes() > 1 ? 's' : '' }} au total
+      </p>
+
+    </div>
+
+    <!-- Comments placeholder -->
+    <div class="card">
+      <h3 class="font-semibold text-gray-800 mb-3">Commentaires</h3>
+      <p class="text-sm text-gray-400 text-center py-6">Les commentaires seront disponibles prochainement.</p>
+    </div>
+
+  }
+
 </div>
