@@ -6,4 +6,9 @@ import { Component } from '@angular/core';
   templateUrl: './debate-detail.html',
   styleUrl: './debate-detail.scss',
 })
-export class DebateDetail {}
+export class DebateDetail {
+  sides = [
+    { label: 'Pour',    pct: 58, votes: 198 },
+    { label: 'Contre',  pct: 42, votes: 144 },
+  ];
+}

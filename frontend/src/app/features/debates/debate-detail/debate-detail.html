@@ -1,1 +1,27 @@
-<p>debate-detail works!</p>
+<div class="max-w-3xl mx-auto py-8 px-4 space-y-6">
+  <div class="card">
+    <h2 class="text-xl font-bold text-gray-900 mb-4">L'intelligence artificielle va-t-elle remplacer les développeurs d'ici 10 ans ?</h2>
+    <div class="space-y-3">
+      @for (side of sides; track side.label; let i = $index) {
+        <button class="w-full text-left p-4 rounded-xl border-2 hover:border-indigo-400 transition-colors"
+                [class.border-indigo-500]="i===0" [class.bg-indigo-50]="i===0"
+                [class.border-orange-500]="i===1" [class.bg-orange-50]="i===1">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-semibold" [class.text-indigo-700]="i===0" [class.text-orange-600]="i===1">{{ side.label }}</span>
+            <span class="text-sm font-bold" [class.text-indigo-600]="i===0" [class.text-orange-500]="i===1">{{ side.pct }}%</span>
+          </div>
+          <div class="h-2 bg-white rounded-full overflow-hidden">
+            <div class="h-full rounded-full" [style.width]="side.pct+'%'"
+                 [class.bg-indigo-500]="i===0" [class.bg-orange-500]="i===1"></div>
+          </div>
+          <p class="text-xs text-gray-500 mt-2">{{ side.votes }} votes</p>
+        </button>
+      }
+    </div>
+    <p class="text-center text-sm text-gray-400 mt-4">342 votes · 67 commentaires</p>
+  </div>
+  <div class="card">
+    <h3 class="font-semibold text-gray-800 mb-3">Commentaires <span class="text-gray-400 font-normal text-sm">(67)</span></h3>
+    <p class="text-sm text-gray-400 text-center py-6">Les commentaires s'afficheront ici.</p>
+  </div>
+</div>

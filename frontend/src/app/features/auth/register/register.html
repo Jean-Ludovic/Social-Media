@@ -1,1 +1,52 @@
-<p>register works!</p>
+<div class="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
+  <div class="w-full max-w-md">
+
+    <div class="text-center mb-8">
+      <div class="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+        <svg class="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0" />
+        </svg>
+      </div>
+      <h1 class="text-3xl font-bold text-gray-900">Réseau</h1>
+      <p class="text-gray-500 mt-1">Créez votre compte gratuitement</p>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+      <form (ngSubmit)="onSubmit()" #form="ngForm" class="space-y-5">
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">Nom d'affichage</label>
+          <input type="text" name="displayName" [(ngModel)]="displayName" required
+                 placeholder="Jean Dupont"
+                 class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:bg-white transition-all" />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">Adresse email</label>
+          <input type="email" name="email" [(ngModel)]="email" required
+                 placeholder="vous@exemple.com"
+                 class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:bg-white transition-all" />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">Mot de passe</label>
+          <input type="password" name="password" [(ngModel)]="password" required minlength="8"
+                 placeholder="Minimum 8 caractères"
+                 class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:bg-white transition-all" />
+        </div>
+
+        <button type="submit" [disabled]="loading || !email || !password || !displayName"
+                class="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-semibold py-2.5 px-4 rounded-xl transition-colors duration-200 text-sm">
+          @if (loading) { Création en cours... } @else { Créer mon compte }
+        </button>
+
+      </form>
+
+      <div class="mt-6 text-center text-sm text-gray-500">
+        Déjà un compte ?
+        <a routerLink="/login" class="text-indigo-600 hover:text-indigo-800 font-medium ml-1">Se connecter</a>
+      </div>
+    </div>
+
+  </div>
+</div>
