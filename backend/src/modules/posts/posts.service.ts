@@ -2,13 +2,29 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Post } from './entities/post.entity';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
+import { UsersService } from '../users/users.service';
+
+export interface PostWithAuthor extends Post {
+  authorName: string;
+}
 
 @Injectable()
 export class PostsService {
+  constructor(private readonly usersService: UsersService) {}
+
   private posts: Post[] = [];
 
-  async findAll(): Promise<Post[]> {
-    return this.posts;
+  async findAll(): Promise<PostWithAuthor[]> {
+    const results: PostWithAuthor[] = [];
+    for (const post of [...this.posts].reverse()) {
+      try {
+        const author = await this.usersService.findById(post.authorId);
+        results.push({ ...post, authorName: author.displayName });
+      } catch {
+        results.push({ ...post, authorName: 'Utilisateur inconnu' });
+      }
+    }
+    return results;
   }
 
   async findOne(id: string): Promise<Post> {
@@ -17,7 +33,7 @@ export class PostsService {
     return post;
   }
 
-  async create(authorId: string, dto: CreatePostDto): Promise<Post> {
+  async create(authorId: string, dto: CreatePostDto): Promise<PostWithAuthor> {
     const post: Post = {
       id: Date.now().toString(),
       authorId,
@@ -27,7 +43,12 @@ export class PostsService {
       createdAt: new Date(),
     };
     this.posts.push(post);
-    return post;
+    try {
+      const author = await this.usersService.findById(authorId);
+      return { ...post, authorName: author.displayName };
+    } catch {
+      return { ...post, authorName: 'Utilisateur inconnu' };
+    }
   }
 
   async update(id: string, dto: UpdatePostDto): Promise<Post> {
