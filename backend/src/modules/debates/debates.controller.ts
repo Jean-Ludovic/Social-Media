@@ -20,7 +20,7 @@ export class DebatesController {
   }
 
   @Post()
-  create(@CurrentUser() user: any, @Body() dto: CreateDebateDto) {
+  create(@CurrentUser() user: { userId: string }, @Body() dto: CreateDebateDto) {
     return this.debatesService.create(user.userId, dto);
   }
 
@@ -28,7 +28,7 @@ export class DebatesController {
   vote(
     @Param('id') id: string,
     @Param('sideId') sideId: string,
-    @CurrentUser() user: any,
+    @CurrentUser() user: { userId: string },
   ) {
     return this.debatesService.vote(id, sideId, user.userId);
   }

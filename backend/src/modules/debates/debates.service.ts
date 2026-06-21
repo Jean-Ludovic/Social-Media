@@ -1,60 +1,103 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { Debate } from './entities/debate.entity';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
 import { CreateDebateDto } from './dto/create-debate.dto';
-import { UsersService } from '../users/users.service';
 
-export interface DebateWithAuthor extends Debate {
-  authorName: string;
+// Shared include — author display name + all sides
+const debateInclude = {
+  author: { select: { displayName: true } },
+  debateSides: { orderBy: { votesCount: 'desc' as const } },
+} as const;
+
+// Maps a Prisma Post row (with includes) to the response shape expected by the frontend
+function toDebateResponse(post: {
+  id: string;
+  authorId: string;
+  content: string;
+  imageUrl: string | null;
+  createdAt: Date;
+  author: { displayName: string };
+  debateSides: { id: string; postId: string; label: string; votesCount: number }[];
+}) {
+  const { content, author, debateSides, ...rest } = post;
+  return {
+    ...rest,
+    question: content,
+    sides: debateSides,
+    authorName: author.displayName,
+  };
 }
 
 @Injectable()
 export class DebatesService {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  private debates: Debate[] = [];
+  async findAll() {
+    const posts = await this.prisma.post.findMany({
+      where: { type: 'debate' },
+      include: debateInclude,
+      orderBy: { createdAt: 'desc' },
+    });
+    return posts.map(toDebateResponse);
+  }
 
-  private async enrich(debate: Debate): Promise<DebateWithAuthor> {
+  async findOne(id: string) {
+    const post = await this.prisma.post.findUnique({
+      where: { id },
+      include: debateInclude,
+    });
+    if (!post || post.type !== 'debate') throw new NotFoundException('Debate not found');
+    return toDebateResponse(post);
+  }
+
+  async create(authorId: string, dto: CreateDebateDto) {
+    const post = await this.prisma.post.create({
+      data: {
+        authorId,
+        content: dto.question,
+        type: 'debate',
+        imageUrl: null,
+        debateSides: {
+          create: dto.sides.map((label) => ({ label })),
+        },
+      },
+      include: debateInclude,
+    });
+    return toDebateResponse(post);
+  }
+
+  async vote(debateId: string, sideId: string, userId: string) {
+    // Verify the debate exists and the targeted side belongs to it
+    const debate = await this.prisma.post.findUnique({
+      where: { id: debateId },
+      include: { debateSides: { where: { id: sideId } } },
+    });
+    if (!debate || debate.type !== 'debate') throw new NotFoundException('Debate not found');
+    if (debate.debateSides.length === 0) throw new NotFoundException('Side not found');
+
+    // Atomic: create vote record + increment denormalized counter
     try {
-      const author = await this.usersService.findById(debate.authorId);
-      return { ...debate, authorName: author.displayName };
-    } catch {
-      return { ...debate, authorName: 'Utilisateur inconnu' };
+      await this.prisma.$transaction(async (tx) => {
+        await tx.debateVote.create({
+          data: { postId: debateId, sideId, userId },
+        });
+        await tx.debateSide.update({
+          where: { id: sideId },
+          data: { votesCount: { increment: 1 } },
+        });
+      });
+    } catch (error) {
+      // Unique constraint [postId, userId] fired → user already voted
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('Already voted in this debate');
+      }
+      throw error;
     }
-  }
 
-  async findAll(): Promise<DebateWithAuthor[]> {
-    const enriched = await Promise.all([...this.debates].reverse().map(d => this.enrich(d)));
-    return enriched;
-  }
-
-  async findOne(id: string): Promise<DebateWithAuthor> {
-    const debate = this.debates.find((d) => d.id === id);
-    if (!debate) throw new NotFoundException('Debate not found');
-    return this.enrich(debate);
-  }
-
-  async create(authorId: string, dto: CreateDebateDto): Promise<DebateWithAuthor> {
-    const debate: Debate = {
-      id: Date.now().toString(),
-      authorId,
-      question: dto.question,
-      sides: dto.sides.map((label, i) => ({
-        id: `${Date.now()}-${i}`,
-        label,
-        votesCount: 0,
-      })),
-      createdAt: new Date(),
-    };
-    this.debates.push(debate);
-    return this.enrich(debate);
-  }
-
-  async vote(debateId: string, sideId: string, _userId: string): Promise<DebateWithAuthor> {
-    const debate = this.debates.find((d) => d.id === debateId);
-    if (!debate) throw new NotFoundException('Debate not found');
-    const side = debate.sides.find((s) => s.id === sideId);
-    if (!side) throw new NotFoundException('Side not found');
-    side.votesCount++;
-    return this.enrich(debate);
+    // Return the updated debate with fresh vote counts
+    return this.findOne(debateId);
   }
 }
