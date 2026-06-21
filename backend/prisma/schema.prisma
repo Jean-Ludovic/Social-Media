@@ -61,39 +61,46 @@ model Post {
   authorId  String   @map("author_id") @db.Uuid
   content   String
   imageUrl  String?  @map("image_url")
-  type      PostType
+  type      PostType @default(post)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   author      User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
   debateSides DebateSide[]
+  debateVotes DebateVote[]
   comments    Comment[]
   reactions   Reaction[]
 
+  @@index([authorId, createdAt])
   @@map("posts")
 }
 
 model DebateSide {
-  id         String @id @default(uuid()) @db.Uuid
-  postId     String @map("post_id") @db.Uuid
-  label      String @db.VarChar(100)
-  votesCount Int    @default(0) @map("votes_count")
+  id    String @id @default(uuid()) @db.Uuid
+  postId String @map("post_id") @db.Uuid
+  label  String @db.VarChar(100)
+  // Denormalized counter — DebateVote is the source of truth; keep in sync in service on each vote
+  votesCount Int @default(0) @map("votes_count")
 
   post  Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
   votes DebateVote[]
 
+  @@index([postId])
   @@map("debate_sides")
 }
 
 model DebateVote {
   id        String   @id @default(uuid()) @db.Uuid
+  postId    String   @map("post_id") @db.Uuid
   sideId    String   @map("side_id") @db.Uuid
   userId    String   @map("user_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  post Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
   side DebateSide @relation(fields: [sideId], references: [id], onDelete: Cascade)
   user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([sideId, userId])
+  // 1 vote per user per debate — @@unique also creates the covering index
+  @@unique([postId, userId])
   @@map("debate_votes")
 }
 
@@ -107,6 +114,7 @@ model Comment {
   post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
   author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
+  @@index([postId, createdAt])
   @@map("comments")
 }
 
@@ -121,6 +129,7 @@ model Reaction {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
+  @@index([postId])
   @@map("reactions")
 }
 
@@ -135,6 +144,8 @@ model Friendship {
   receiver  User @relation("FriendshipReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
 
   @@unique([requesterId, receiverId])
+  @@index([receiverId, status])
+  @@index([requesterId, status])
   @@map("friendships")
 }
 
@@ -186,6 +197,7 @@ model Message {
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
+  @@index([conversationId, createdAt])
   @@map("messages")
 }
 
@@ -227,5 +239,6 @@ model Notification {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, read, createdAt])
   @@map("notifications")
 }
