@@ -18,7 +18,7 @@ export class AuthService {
 
     const hashed = await bcrypt.hash(dto.password, 10);
     const user = await this.usersService.create({ ...dto, password: hashed });
-    const { password: _pw, ...result } = user as any;
+    const { passwordHash: _pw, ...result } = user;
     return {
       user: result,
       access_token: this.jwtService.sign({ sub: user.id, email: user.email }),
@@ -29,10 +29,10 @@ export class AuthService {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    const valid = await bcrypt.compare(dto.password, user.password);
+    const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
-    const { password: _pw, ...result } = user as any;
+    const { passwordHash: _pw, ...result } = user;
     return {
       user: result,
       access_token: this.jwtService.sign({ sub: user.id, email: user.email }),
