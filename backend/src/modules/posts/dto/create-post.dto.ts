@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsEnum } from 'class-validator';
-import { PostType } from '../entities/post.entity';
+import { PostType } from '@prisma/client';
 
 export class CreatePostDto {
   @IsString()
@@ -10,6 +10,6 @@ export class CreatePostDto {
   imageUrl?: string;
 
   @IsOptional()
-  @IsEnum(['post', 'debate'])
+  @IsEnum(PostType)
   type?: PostType;
 }

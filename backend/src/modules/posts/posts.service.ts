@@ -1,65 +1,62 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { Post } from './entities/post.entity';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
-import { UsersService } from '../users/users.service';
 
-export interface PostWithAuthor extends Post {
-  authorName: string;
-}
+const authorSelect = { author: { select: { displayName: true } } } as const;
 
 @Injectable()
 export class PostsService {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  private posts: Post[] = [];
-
-  async findAll(): Promise<PostWithAuthor[]> {
-    const results: PostWithAuthor[] = [];
-    for (const post of [...this.posts].reverse()) {
-      try {
-        const author = await this.usersService.findById(post.authorId);
-        results.push({ ...post, authorName: author.displayName });
-      } catch {
-        results.push({ ...post, authorName: 'Utilisateur inconnu' });
-      }
-    }
-    return results;
+  async findAll() {
+    const posts = await this.prisma.post.findMany({
+      include: authorSelect,
+      orderBy: { createdAt: 'desc' },
+    });
+    return posts.map(({ author, ...post }) => ({ ...post, authorName: author.displayName }));
   }
 
-  async findOne(id: string): Promise<Post> {
-    const post = this.posts.find((p) => p.id === id);
+  async findOne(id: string) {
+    const post = await this.prisma.post.findUnique({ where: { id }, include: authorSelect });
     if (!post) throw new NotFoundException('Post not found');
-    return post;
+    const { author, ...rest } = post;
+    return { ...rest, authorName: author.displayName };
   }
 
-  async create(authorId: string, dto: CreatePostDto): Promise<PostWithAuthor> {
-    const post: Post = {
-      id: Date.now().toString(),
-      authorId,
-      content: dto.content,
-      imageUrl: dto.imageUrl ?? null,
-      type: dto.type ?? 'post',
-      createdAt: new Date(),
-    };
-    this.posts.push(post);
-    try {
-      const author = await this.usersService.findById(authorId);
-      return { ...post, authorName: author.displayName };
-    } catch {
-      return { ...post, authorName: 'Utilisateur inconnu' };
-    }
+  async create(authorId: string, dto: CreatePostDto) {
+    const post = await this.prisma.post.create({
+      data: {
+        authorId,
+        content: dto.content,
+        imageUrl: dto.imageUrl ?? null,
+        type: dto.type ?? 'post',
+      },
+      include: authorSelect,
+    });
+    const { author, ...rest } = post;
+    return { ...rest, authorName: author.displayName };
   }
 
-  async update(id: string, dto: UpdatePostDto): Promise<Post> {
-    const post = await this.findOne(id);
-    Object.assign(post, dto);
-    return post;
+  async update(id: string, userId: string, dto: UpdatePostDto) {
+    const existing = await this.prisma.post.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Post not found');
+    if (existing.authorId !== userId) throw new ForbiddenException('Not allowed');
+
+    const post = await this.prisma.post.update({
+      where: { id },
+      data: dto,
+      include: authorSelect,
+    });
+    const { author, ...rest } = post;
+    return { ...rest, authorName: author.displayName };
   }
 
-  async remove(id: string): Promise<void> {
-    const idx = this.posts.findIndex((p) => p.id === id);
-    if (idx === -1) throw new NotFoundException('Post not found');
-    this.posts.splice(idx, 1);
+  async remove(id: string, userId: string): Promise<void> {
+    const existing = await this.prisma.post.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Post not found');
+    if (existing.authorId !== userId) throw new ForbiddenException('Not allowed');
+
+    await this.prisma.post.delete({ where: { id } });
   }
 }

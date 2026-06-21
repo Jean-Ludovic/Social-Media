@@ -21,17 +21,21 @@ export class PostsController {
   }
 
   @Post()
-  create(@CurrentUser() user: any, @Body() dto: CreatePostDto) {
+  create(@CurrentUser() user: { userId: string }, @Body() dto: CreatePostDto) {
     return this.postsService.create(user.userId, dto);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdatePostDto) {
-    return this.postsService.update(id, dto);
+  update(
+    @Param('id') id: string,
+    @CurrentUser() user: { userId: string },
+    @Body() dto: UpdatePostDto,
+  ) {
+    return this.postsService.update(id, user.userId, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.postsService.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: { userId: string }) {
+    return this.postsService.remove(id, user.userId);
   }
 }
