@@ -1,21 +1,30 @@
-import { Component, signal, computed, inject } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
+import { ApiService } from '../../core/services/api';
+import { AuthService } from '../../core/services/auth';
 
-interface Conversation {
-  id: string;
-  name: string;
-  initials: string;
-  lastMessage: string;
-  time: string;
-  unread: number;
-  online: boolean;
+interface ConversationParticipant {
+  userId: string;
+  displayName: string;
 }
 
-interface Message {
+interface ConversationSummary {
+  conversationId: string;
+  participants: ConversationParticipant[];
+  lastMessageAt: string | null;
+}
+
+interface ConversationListItem extends ConversationSummary {
+  partner: ConversationParticipant;
+}
+
+interface MessageItem {
   id: string;
+  senderId: string;
   content: string;
-  sentAt: string;
-  isMine: boolean;
+  createdAt: string;
+  readAt: string | null;
 }
 
 @Component({
@@ -24,9 +33,11 @@ interface Message {
   templateUrl: './messages.html',
   styleUrl: './messages.scss',
 })
-export class Messages {
-  newMessage = '';
-  activeConversationId = signal<string | null>('1');
+export class Messages implements OnInit {
+  private readonly api    = inject(ApiService);
+  private readonly auth   = inject(AuthService);
+  private readonly route  = inject(ActivatedRoute);
+  private readonly router = inject(Router);
 
   private readonly avatarGradients = [
     'linear-gradient(135deg, #ec4899, #f43f5e)',
@@ -36,63 +47,97 @@ export class Messages {
     'linear-gradient(135deg, #8b5cf6, #a855f7)',
   ];
 
-  conversations: Conversation[] = [
-    { id: '1', name: 'Alice Martin',   initials: 'AM', lastMessage: 'Tu as vu le dernier débat ?',      time: '14:32', unread: 3, online: true },
-    { id: '2', name: 'Bob Dupont',     initials: 'BD', lastMessage: 'Super idée !',                     time: '13:15', unread: 0, online: false },
-    { id: '3', name: 'Clara Fontaine', initials: 'CF', lastMessage: 'On se retrouve ce soir ?',          time: '11:58', unread: 1, online: true },
-    { id: '4', name: 'David Leclerc',  initials: 'DL', lastMessage: 'Merci pour le partage !',           time: 'Hier',  unread: 0, online: false },
-    { id: '5', name: 'Emma Rousseau',  initials: 'ER', lastMessage: 'Le live était excellent 🔥',        time: 'Hier',  unread: 0, online: true },
-  ];
+  conversations       = signal<ConversationListItem[]>([]);
+  activeMessages       = signal<MessageItem[]>([]);
+  activePartnerId      = signal<string | null>(null);
+  loadingConversations = signal(true);
+  loadingMessages       = signal(false);
+  error                 = signal('');
 
-  messages: Record<string, Message[]> = {
-    '1': [
-      { id: '1', content: 'Salut ! Comment tu vas ?',                                                    sentAt: '14:28', isMine: false },
-      { id: '2', content: 'Très bien merci, et toi ?',                                                   sentAt: '14:29', isMine: true },
-      { id: '3', content: 'Super ! Tu as vu le dernier débat ?',                                         sentAt: '14:30', isMine: false },
-      { id: '4', content: "Pas encore, c'était sur quoi ?",                                              sentAt: '14:31', isMine: true },
-      { id: '5', content: 'Sur la tech et la société, vraiment intéressant. Tu devrais regarder !',      sentAt: '14:32', isMine: false },
-    ],
-    '2': [
-      { id: '1', content: "Hey, j'ai eu ton message.",  sentAt: '13:10', isMine: false },
-      { id: '2', content: 'Super idée !',               sentAt: '13:15', isMine: false },
-    ],
-    '3': [
-      { id: '1', content: 'On se retrouve ce soir ?',   sentAt: '11:58', isMine: false },
-    ],
-  };
+  newMessage = '';
+  sending    = signal(false);
 
-  activeConversation = computed(() =>
-    this.conversations.find(c => c.id === this.activeConversationId()) ?? null
-  );
-
-  activeMessages = computed(() => {
-    const id = this.activeConversationId();
-    return id ? (this.messages[id] ?? []) : [];
-  });
-
-  avatarStyle(id: string): string {
-    const idx = (parseInt(id, 10) - 1) % this.avatarGradients.length;
-    return this.avatarGradients[idx];
+  private get currentUserId(): string {
+    return this.auth.currentUser()?.id ?? '';
   }
 
-  selectConversation(id: string) {
-    this.activeConversationId.set(id);
-    const conv = this.conversations.find(c => c.id === id);
-    if (conv) conv.unread = 0;
+  activeConversation = computed(() =>
+    this.conversations().find((c) => c.partner.userId === this.activePartnerId()) ?? null,
+  );
+
+  ngOnInit() {
+    this.loadConversations();
+    const partnerId = this.route.snapshot.paramMap.get('conversationId');
+    if (partnerId) this.openConversation(partnerId);
+  }
+
+  loadConversations() {
+    this.loadingConversations.set(true);
+    this.api.get<ConversationSummary[]>('/messages/conversations').subscribe({
+      next: (list) => {
+        const me = this.currentUserId;
+        this.conversations.set(
+          list
+            .map((c) => ({ ...c, partner: c.participants.find((p) => p.userId !== me) }))
+            .filter((c): c is ConversationListItem => !!c.partner),
+        );
+        this.loadingConversations.set(false);
+      },
+      error: () => {
+        this.error.set('Impossible de charger vos conversations.');
+        this.loadingConversations.set(false);
+      },
+    });
+  }
+
+  openConversation(partnerId: string) {
+    this.activePartnerId.set(partnerId);
+    this.loadingMessages.set(true);
+    this.router.navigate(['/messages', partnerId]);
+
+    this.api.get<MessageItem[]>(`/messages/${partnerId}`).subscribe({
+      next: (msgs) => {
+        this.activeMessages.set(msgs);
+        this.loadingMessages.set(false);
+        this.markUnreadAsRead(msgs);
+      },
+      error: () => {
+        this.error.set('Impossible de charger cette conversation.');
+        this.loadingMessages.set(false);
+      },
+    });
+  }
+
+  private markUnreadAsRead(msgs: MessageItem[]) {
+    const me = this.currentUserId;
+    for (const msg of msgs) {
+      if (msg.senderId !== me && !msg.readAt) {
+        this.api.patch(`/messages/${msg.id}/read`, {}).subscribe();
+      }
+    }
   }
 
   sendMessage() {
-    const text = this.newMessage.trim();
-    if (!text) return;
-    const id = this.activeConversationId();
-    if (!id) return;
+    const content = this.newMessage.trim();
+    const partnerId = this.activePartnerId();
+    if (!content || !partnerId || this.sending()) return;
 
-    if (!this.messages[id]) this.messages[id] = [];
-    const now = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    this.messages[id].push({ id: Date.now().toString(), content: text, sentAt: now, isMine: true });
-    const conv = this.conversations.find(c => c.id === id);
-    if (conv) { conv.lastMessage = text; conv.time = 'maintenant'; }
-    this.newMessage = '';
+    this.sending.set(true);
+    this.api.post<MessageItem>(`/messages/${partnerId}`, { content }).subscribe({
+      next: (msg) => {
+        this.activeMessages.update((list) => [...list, msg]);
+        this.newMessage = '';
+        this.sending.set(false);
+        this.loadConversations();
+      },
+      error: () => {
+        this.sending.set(false);
+      },
+    });
+  }
+
+  isMine(msg: MessageItem): boolean {
+    return msg.senderId === this.currentUserId;
   }
 
   onKeydown(event: KeyboardEvent) {
@@ -100,5 +145,30 @@ export class Messages {
       event.preventDefault();
       this.sendMessage();
     }
+  }
+
+  initials(name: string): string {
+    return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
+  }
+
+  avatarColor(id: string): string {
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) hash = (hash + id.charCodeAt(i)) % this.avatarGradients.length;
+    return this.avatarGradients[hash];
+  }
+
+  formatLastMessageAt(iso: string | null): string {
+    if (!iso) return '';
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "À l'instant";
+    if (mins < 60) return `${mins} min`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h`;
+    return `${Math.floor(hrs / 24)}j`;
+  }
+
+  messageTime(iso: string): string {
+    return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   }
 }
