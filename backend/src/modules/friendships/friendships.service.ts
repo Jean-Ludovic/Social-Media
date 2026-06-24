@@ -1,4 +1,10 @@
-import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { FriendshipStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -78,9 +84,12 @@ export class FriendshipsService {
     return this.sendRequest(requesterId, target.id);
   }
 
-  async respond(id: string, status: FriendshipStatus) {
+  async respond(id: string, currentUserId: string, status: FriendshipStatus) {
     const friendship = await this.prisma.friendship.findUnique({ where: { id } });
     if (!friendship) throw new NotFoundException('Friendship request not found');
+    if (friendship.receiverId !== currentUserId) {
+      throw new ForbiddenException('Not allowed');
+    }
 
     return this.prisma.friendship.update({ where: { id }, data: { status } });
   }

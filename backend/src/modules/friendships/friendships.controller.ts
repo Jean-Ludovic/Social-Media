@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Patch, Param, Body, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Param,
+  Body,
+  UseGuards,
+  ParseUUIDPipe,
+} from '@nestjs/common';
 import { FriendshipsService } from './friendships.service';
 import { RequestByEmailDto } from './dto/request-by-email.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -25,17 +34,20 @@ export class FriendshipsController {
   }
 
   @Post('request/:receiverId')
-  sendRequest(@CurrentUser() user: { userId: string }, @Param('receiverId') receiverId: string) {
+  sendRequest(
+    @CurrentUser() user: { userId: string },
+    @Param('receiverId', ParseUUIDPipe) receiverId: string,
+  ) {
     return this.friendshipsService.sendRequest(user.userId, receiverId);
   }
 
   @Patch(':id/accept')
-  accept(@Param('id') id: string) {
-    return this.friendshipsService.respond(id, 'accepted');
+  accept(@CurrentUser() user: { userId: string }, @Param('id', ParseUUIDPipe) id: string) {
+    return this.friendshipsService.respond(id, user.userId, 'accepted');
   }
 
   @Patch(':id/reject')
-  reject(@Param('id') id: string) {
-    return this.friendshipsService.respond(id, 'rejected');
+  reject(@CurrentUser() user: { userId: string }, @Param('id', ParseUUIDPipe) id: string) {
+    return this.friendshipsService.respond(id, user.userId, 'rejected');
   }
 }

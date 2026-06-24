@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { StatusesService } from './statuses.service';
 import { CreateStatusDto } from './dto/create-status.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -15,7 +24,7 @@ export class StatusesController {
   }
 
   @Get('user/:userId')
-  findActiveByUser(@Param('userId') userId: string) {
+  findActiveByUser(@Param('userId', ParseUUIDPipe) userId: string) {
     return this.statusesService.findActiveByUser(userId);
   }
 
@@ -25,7 +34,7 @@ export class StatusesController {
   }
 
   @Delete(':id')
-  remove(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
+  remove(@CurrentUser() user: { userId: string }, @Param('id', ParseUUIDPipe) id: string) {
     return this.statusesService.remove(id, user.userId);
   }
 }

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, ParseUUIDPipe, Body, UseGuards } from '@nestjs/common';
 import { DebatesService } from './debates.service';
 import { CreateDebateDto } from './dto/create-debate.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -15,7 +15,7 @@ export class DebatesController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.debatesService.findOne(id);
   }
 
@@ -26,8 +26,8 @@ export class DebatesController {
 
   @Post(':id/vote/:sideId')
   vote(
-    @Param('id') id: string,
-    @Param('sideId') sideId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('sideId', ParseUUIDPipe) sideId: string,
     @CurrentUser() user: { userId: string },
   ) {
     return this.debatesService.vote(id, sideId, user.userId);

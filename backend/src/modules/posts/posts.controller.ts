@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  ParseUUIDPipe,
+  Body,
+  UseGuards,
+} from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
@@ -16,7 +26,7 @@ export class PostsController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.postsService.findOne(id);
   }
 
@@ -27,7 +37,7 @@ export class PostsController {
 
   @Patch(':id')
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: { userId: string },
     @Body() dto: UpdatePostDto,
   ) {
@@ -35,7 +45,7 @@ export class PostsController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string, @CurrentUser() user: { userId: string }) {
+  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: { userId: string }) {
     return this.postsService.remove(id, user.userId);
   }
 }
