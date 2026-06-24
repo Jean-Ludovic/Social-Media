@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { LivesService } from './lives.service';
 import { CreateLiveDto } from './dto/create-live.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -14,18 +14,23 @@ export class LivesController {
     return this.livesService.findActive();
   }
 
+  @Get('host/:hostId')
+  findByHost(@Param('hostId') hostId: string) {
+    return this.livesService.findByHost(hostId);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.livesService.findOne(id);
   }
 
   @Post('start')
-  start(@CurrentUser() user: any, @Body() dto: CreateLiveDto) {
+  start(@CurrentUser() user: { userId: string }, @Body() dto: CreateLiveDto) {
     return this.livesService.start(user.userId, dto);
   }
 
   @Patch(':id/end')
-  end(@Param('id') id: string) {
-    return this.livesService.end(id);
+  end(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
+    return this.livesService.end(id, user.userId);
   }
 }
