@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, UseGuards } from '@nestjs/common';
+import { Controller, Delete, Get, Param, Patch, UseGuards } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -9,17 +9,27 @@ export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get()
-  findAll(@CurrentUser() user: any) {
+  findAll(@CurrentUser() user: { userId: string }) {
     return this.notificationsService.findAll(user.userId);
   }
 
+  @Get('unread-count')
+  countUnread(@CurrentUser() user: { userId: string }) {
+    return this.notificationsService.countUnread(user.userId);
+  }
+
   @Patch(':id/read')
-  markRead(@Param('id') id: string) {
-    return this.notificationsService.markRead(id);
+  markRead(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
+    return this.notificationsService.markRead(id, user.userId);
   }
 
   @Patch('read-all')
-  markAllRead(@CurrentUser() user: any) {
+  markAllRead(@CurrentUser() user: { userId: string }) {
     return this.notificationsService.markAllRead(user.userId);
+  }
+
+  @Delete(':id')
+  remove(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
+    return this.notificationsService.remove(id, user.userId);
   }
 }

@@ -1,6 +1,6 @@
 import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
-import { Friendship, FriendshipStatus } from './entities/friendship.entity';
-import { UsersService } from '../users/users.service';
+import { FriendshipStatus } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
 
 export interface FriendEntry {
   friendshipId: string;
@@ -14,85 +14,74 @@ export interface PendingEntry {
   requesterName: string;
 }
 
+const displayNameSelect = { select: { displayName: true } } as const;
+
 @Injectable()
 export class FriendshipsService {
-  constructor(private readonly usersService: UsersService) {}
-
-  private friendships: Friendship[] = [];
-
-  async getFriends(userId: string): Promise<Friendship[]> {
-    return this.friendships.filter(
-      (f) => f.status === 'accepted' && (f.requesterId === userId || f.receiverId === userId),
-    );
-  }
-
-  async getPendingRequests(userId: string): Promise<Friendship[]> {
-    return this.friendships.filter(
-      (f) => f.status === 'pending' && f.receiverId === userId,
-    );
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   async getFriendsEnriched(userId: string): Promise<FriendEntry[]> {
-    const accepted = await this.getFriends(userId);
-    const entries: FriendEntry[] = [];
-    for (const f of accepted) {
-      const friendId = f.requesterId === userId ? f.receiverId : f.requesterId;
-      try {
-        const user = await this.usersService.findById(friendId);
-        entries.push({ friendshipId: f.id, friendId, friendName: user.displayName });
-      } catch {
-        entries.push({ friendshipId: f.id, friendId, friendName: 'Utilisateur inconnu' });
-      }
-    }
-    return entries;
+    const friendships = await this.prisma.friendship.findMany({
+      where: {
+        status: 'accepted',
+        OR: [{ requesterId: userId }, { receiverId: userId }],
+      },
+      include: { requester: displayNameSelect, receiver: displayNameSelect },
+    });
+
+    return friendships.map((f) => {
+      const isRequester = f.requesterId === userId;
+      return {
+        friendshipId: f.id,
+        friendId: isRequester ? f.receiverId : f.requesterId,
+        friendName: isRequester ? f.receiver.displayName : f.requester.displayName,
+      };
+    });
   }
 
   async getPendingEnriched(userId: string): Promise<PendingEntry[]> {
-    const pending = await this.getPendingRequests(userId);
-    const entries: PendingEntry[] = [];
-    for (const f of pending) {
-      try {
-        const user = await this.usersService.findById(f.requesterId);
-        entries.push({ friendshipId: f.id, requesterId: f.requesterId, requesterName: user.displayName });
-      } catch {
-        entries.push({ friendshipId: f.id, requesterId: f.requesterId, requesterName: 'Utilisateur inconnu' });
-      }
-    }
-    return entries;
+    const pending = await this.prisma.friendship.findMany({
+      where: { status: 'pending', receiverId: userId },
+      include: { requester: displayNameSelect },
+    });
+
+    return pending.map((f) => ({
+      friendshipId: f.id,
+      requesterId: f.requesterId,
+      requesterName: f.requester.displayName,
+    }));
   }
 
-  async sendRequest(requesterId: string, receiverId: string): Promise<Friendship> {
+  async sendRequest(requesterId: string, receiverId: string) {
     if (requesterId === receiverId) {
       throw new BadRequestException('Cannot send a request to yourself');
     }
-    const exists = this.friendships.find(
-      (f) =>
-        (f.requesterId === requesterId && f.receiverId === receiverId) ||
-        (f.requesterId === receiverId && f.receiverId === requesterId),
-    );
-    if (exists) throw new ConflictException('Friendship already exists');
 
-    const friendship: Friendship = {
-      id: Date.now().toString(),
-      requesterId,
-      receiverId,
-      status: 'pending',
-      createdAt: new Date(),
-    };
-    this.friendships.push(friendship);
-    return friendship;
+    const existing = await this.prisma.friendship.findFirst({
+      where: {
+        OR: [
+          { requesterId, receiverId },
+          { requesterId: receiverId, receiverId: requesterId },
+        ],
+      },
+    });
+    if (existing) throw new ConflictException('Friendship already exists');
+
+    return this.prisma.friendship.create({
+      data: { requesterId, receiverId },
+    });
   }
 
-  async requestByEmail(requesterId: string, email: string): Promise<Friendship> {
-    const target = await this.usersService.findByEmail(email);
+  async requestByEmail(requesterId: string, email: string) {
+    const target = await this.prisma.user.findUnique({ where: { email } });
     if (!target) throw new NotFoundException('No user found with this email');
     return this.sendRequest(requesterId, target.id);
   }
 
-  async respond(id: string, status: FriendshipStatus): Promise<Friendship> {
-    const friendship = this.friendships.find((f) => f.id === id);
+  async respond(id: string, status: FriendshipStatus) {
+    const friendship = await this.prisma.friendship.findUnique({ where: { id } });
     if (!friendship) throw new NotFoundException('Friendship request not found');
-    friendship.status = status;
-    return friendship;
+
+    return this.prisma.friendship.update({ where: { id }, data: { status } });
   }
 }

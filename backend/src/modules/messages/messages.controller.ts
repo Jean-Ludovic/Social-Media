@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Body, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { MessagesService } from './messages.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -10,21 +10,26 @@ export class MessagesController {
   constructor(private readonly messagesService: MessagesService) {}
 
   @Get('conversations')
-  getConversations(@CurrentUser() user: any) {
+  getConversations(@CurrentUser() user: { userId: string }) {
     return this.messagesService.getConversations(user.userId);
   }
 
   @Get(':userId')
-  getConversation(@CurrentUser() user: any, @Param('userId') partnerId: string) {
-    return this.messagesService.getConversation(user.userId, partnerId);
+  getConversation(@CurrentUser() user: { userId: string }, @Param('userId') partnerId: string) {
+    return this.messagesService.getMessagesWithPartner(user.userId, partnerId);
   }
 
   @Post(':receiverId')
   send(
-    @CurrentUser() user: any,
+    @CurrentUser() user: { userId: string },
     @Param('receiverId') receiverId: string,
     @Body() dto: CreateMessageDto,
   ) {
-    return this.messagesService.send(user.userId, receiverId, dto);
+    return this.messagesService.sendToPartner(user.userId, receiverId, dto);
+  }
+
+  @Patch(':id/read')
+  markAsRead(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
+    return this.messagesService.markAsRead(id, user.userId);
   }
 }

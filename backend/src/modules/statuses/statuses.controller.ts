@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { StatusesService } from './statuses.service';
 import { CreateStatusDto } from './dto/create-status.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -14,13 +14,18 @@ export class StatusesController {
     return this.statusesService.findActive();
   }
 
+  @Get('user/:userId')
+  findActiveByUser(@Param('userId') userId: string) {
+    return this.statusesService.findActiveByUser(userId);
+  }
+
   @Post()
-  create(@CurrentUser() user: any, @Body() dto: CreateStatusDto) {
+  create(@CurrentUser() user: { userId: string }, @Body() dto: CreateStatusDto) {
     return this.statusesService.create(user.userId, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.statusesService.remove(id);
+  remove(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
+    return this.statusesService.remove(id, user.userId);
   }
 }

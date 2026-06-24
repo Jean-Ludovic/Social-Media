@@ -10,22 +10,22 @@ export class FriendshipsController {
   constructor(private readonly friendshipsService: FriendshipsService) {}
 
   @Get()
-  getFriends(@CurrentUser() user: any) {
+  getFriends(@CurrentUser() user: { userId: string }) {
     return this.friendshipsService.getFriendsEnriched(user.userId);
   }
 
   @Get('pending')
-  getPending(@CurrentUser() user: any) {
+  getPending(@CurrentUser() user: { userId: string }) {
     return this.friendshipsService.getPendingEnriched(user.userId);
   }
 
   @Post('request-by-email')
-  requestByEmail(@CurrentUser() user: any, @Body() dto: RequestByEmailDto) {
+  requestByEmail(@CurrentUser() user: { userId: string }, @Body() dto: RequestByEmailDto) {
     return this.friendshipsService.requestByEmail(user.userId, dto.email);
   }
 
   @Post('request/:receiverId')
-  sendRequest(@CurrentUser() user: any, @Param('receiverId') receiverId: string) {
+  sendRequest(@CurrentUser() user: { userId: string }, @Param('receiverId') receiverId: string) {
     return this.friendshipsService.sendRequest(user.userId, receiverId);
   }
 
