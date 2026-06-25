@@ -144,6 +144,9 @@ export class DebatesService {
     if (!debate || debate.type !== 'debate') throw new NotFoundException('Debate not found');
     if (debate.debateSides.length === 0) throw new NotFoundException('Side not found');
 
+    const visible = await this.isVisibleAuthor(debate.authorId, userId);
+    if (!visible) throw new NotFoundException('Debate not found');
+
     // Atomic: create vote record + increment denormalized counter
     try {
       await this.prisma.$transaction(async (tx) => {
