@@ -4,30 +4,51 @@
   <!-- Add friend -->
   <div class="card">
     <h3 class="font-semibold text-gray-800 mb-3">Ajouter un ami</h3>
-    <div class="flex gap-2">
-      <input type="email" [(ngModel)]="searchEmail" (keydown)="onSearchKeydown($event)"
-             placeholder="Email de la personne..."
-             class="input-field text-sm flex-1" />
-      <button (click)="sendRequest()" [disabled]="!searchEmail.trim() || sending()"
-              class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors shrink-0">
-        @if (sending()) { Envoi... } @else { Envoyer }
-      </button>
-    </div>
-    @if (sendFeedback(); as fb) {
-      <p class="text-sm mt-2 flex items-center gap-1.5"
-         [class.text-green-600]="fb.type === 'success'"
-         [class.text-red-600]="fb.type === 'error'">
-        @if (fb.type === 'success') {
-          <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-          </svg>
-        } @else {
-          <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-          </svg>
+    <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="onSearchInput()"
+           placeholder="Rechercher par nom ou email..."
+           class="input-field text-sm w-full" />
+
+    @if (searching()) {
+      <p class="text-xs text-gray-400 mt-2">Recherche...</p>
+    } @else if (searchError()) {
+      <p class="text-xs text-red-500 mt-2">{{ searchError() }}</p>
+    } @else if (searchQuery.trim().length >= 2 && suggestions().length === 0) {
+      <p class="text-xs text-gray-400 mt-2">Aucun utilisateur trouvé.</p>
+    }
+
+    @if (suggestions().length > 0) {
+      <div class="mt-3 space-y-2">
+        @for (s of suggestions(); track s.id) {
+          <div class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors">
+            <div class="w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-xs shrink-0"
+                 [style.background]="avatarColor(s.id)">{{ initials(s.displayName) }}</div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-gray-900 truncate">{{ s.displayName }}</p>
+              <p class="text-xs text-gray-400 truncate">{{ s.email }}</p>
+            </div>
+            @switch (s.relationshipStatus) {
+              @case ('none') {
+                <button (click)="addFriend(s)" [disabled]="sendingId() === s.id"
+                        class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white text-xs font-medium rounded-lg transition-colors shrink-0">
+                  @if (sendingId() === s.id) { Envoi... } @else { Ajouter }
+                </button>
+              }
+              @case ('accepted') {
+                <span class="px-3 py-1.5 bg-green-50 text-green-700 text-xs font-medium rounded-lg shrink-0">Déjà ami</span>
+              }
+              @case ('pending_sent') {
+                <span class="px-3 py-1.5 bg-gray-100 text-gray-500 text-xs font-medium rounded-lg shrink-0">Demande envoyée</span>
+              }
+              @case ('pending_received') {
+                <span class="px-3 py-1.5 bg-amber-50 text-amber-700 text-xs font-medium rounded-lg shrink-0">À accepter</span>
+              }
+              @case ('rejected') {
+                <span class="px-3 py-1.5 bg-gray-100 text-gray-400 text-xs font-medium rounded-lg shrink-0">Refusée</span>
+              }
+            }
+          </div>
         }
-        {{ fb.msg }}
-      </p>
+      </div>
     }
   </div>
 

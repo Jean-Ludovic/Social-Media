@@ -20,6 +20,16 @@ export interface PendingEntry {
   requesterName: string;
 }
 
+export type RelationshipStatus = 'none' | 'accepted' | 'pending_sent' | 'pending_received' | 'rejected';
+
+export interface UserSearchResult {
+  id: string;
+  displayName: string;
+  email: string;
+  avatarUrl: string | null;
+  relationshipStatus: RelationshipStatus;
+}
+
 const displayNameSelect = { select: { displayName: true } } as const;
 
 @Injectable()
@@ -76,6 +86,52 @@ export class FriendshipsService {
     return this.prisma.friendship.create({
       data: { requesterId, receiverId },
     });
+  }
+
+  async search(currentUserId: string, q: string): Promise<UserSearchResult[]> {
+    const query = q.trim();
+    if (query.length < 2) return [];
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        id: { not: currentUserId },
+        OR: [
+          { displayName: { contains: query, mode: 'insensitive' } },
+          { email: { contains: query, mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true, displayName: true, email: true, avatarUrl: true },
+      take: 20,
+      orderBy: { displayName: 'asc' },
+    });
+    if (users.length === 0) return [];
+
+    const userIds = users.map((u) => u.id);
+    const friendships = await this.prisma.friendship.findMany({
+      where: {
+        OR: [
+          { requesterId: currentUserId, receiverId: { in: userIds } },
+          { receiverId: currentUserId, requesterId: { in: userIds } },
+        ],
+      },
+    });
+
+    const statusByUserId = new Map<string, RelationshipStatus>();
+    for (const f of friendships) {
+      const otherId = f.requesterId === currentUserId ? f.receiverId : f.requesterId;
+      if (f.status === 'accepted') {
+        statusByUserId.set(otherId, 'accepted');
+      } else if (f.status === 'rejected') {
+        statusByUserId.set(otherId, 'rejected');
+      } else {
+        statusByUserId.set(otherId, f.requesterId === currentUserId ? 'pending_sent' : 'pending_received');
+      }
+    }
+
+    return users.map((u) => ({
+      ...u,
+      relationshipStatus: statusByUserId.get(u.id) ?? 'none',
+    }));
   }
 
   async requestByEmail(requesterId: string, email: string) {

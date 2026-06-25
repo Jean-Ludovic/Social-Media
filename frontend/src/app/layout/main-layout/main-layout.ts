@@ -1,5 +1,6 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
+import { AuthService } from '../../core/services/auth';
 
 interface NavItem {
   label: string;
@@ -14,6 +15,8 @@ interface NavItem {
   styleUrl: './main-layout.scss',
 })
 export class MainLayout {
+  readonly auth = inject(AuthService);
+
   sidebarOpen = signal(true);
 
   navItems: NavItem[] = [
@@ -24,4 +27,13 @@ export class MainLayout {
     { label: 'Statuts',         route: '/statuses',  icon: 'clock' },
     { label: 'Lives',           route: '/lives',     icon: 'video' },
   ];
+
+  initials(): string {
+    const name = this.auth.currentUser()?.displayName ?? '';
+    return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '??';
+  }
+
+  logout() {
+    this.auth.logout();
+  }
 }

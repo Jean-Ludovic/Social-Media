@@ -14,9 +14,14 @@ interface PendingEntry {
   requesterName: string;
 }
 
-interface SendFeedback {
-  type: 'success' | 'error';
-  msg: string;
+type RelationshipStatus = 'none' | 'accepted' | 'pending_sent' | 'pending_received' | 'rejected';
+
+interface FriendSuggestion {
+  id: string;
+  displayName: string;
+  email: string;
+  avatarUrl: string | null;
+  relationshipStatus: RelationshipStatus;
 }
 
 @Component({
@@ -28,14 +33,18 @@ interface SendFeedback {
 export class Friends implements OnInit {
   private readonly api = inject(ApiService);
 
-  friends  = signal<FriendEntry[]>([]);
-  pending  = signal<PendingEntry[]>([]);
-  loading  = signal(true);
-  error    = signal('');
+  friends = signal<FriendEntry[]>([]);
+  pending = signal<PendingEntry[]>([]);
+  loading = signal(true);
+  error   = signal('');
 
-  searchEmail  = '';
-  sending      = signal(false);
-  sendFeedback = signal<SendFeedback | null>(null);
+  searchQuery  = '';
+  searching    = signal(false);
+  searchError  = signal('');
+  suggestions  = signal<FriendSuggestion[]>([]);
+  sendingId    = signal<string | null>(null);
+
+  private searchTimeout?: ReturnType<typeof setTimeout>;
 
   ngOnInit() {
     this.loadAll();
@@ -58,26 +67,43 @@ export class Friends implements OnInit {
     });
   }
 
-  sendRequest() {
-    const email = this.searchEmail.trim();
-    if (!email || this.sending()) return;
-    this.sending.set(true);
-    this.sendFeedback.set(null);
+  onSearchInput() {
+    clearTimeout(this.searchTimeout);
+    const query = this.searchQuery.trim();
+    if (query.length < 2) {
+      this.suggestions.set([]);
+      this.searchError.set('');
+      return;
+    }
+    this.searchTimeout = setTimeout(() => this.runSearch(query), 300);
+  }
 
-    this.api.post<unknown>('/friendships/request-by-email', { email }).subscribe({
-      next: () => {
-        this.searchEmail = '';
-        this.sending.set(false);
-        this.sendFeedback.set({ type: 'success', msg: "Demande d'amitié envoyée !" });
-        setTimeout(() => this.sendFeedback.set(null), 4000);
+  private runSearch(query: string) {
+    this.searching.set(true);
+    this.searchError.set('');
+    this.api.get<FriendSuggestion[]>(`/friendships/search?q=${encodeURIComponent(query)}`).subscribe({
+      next: (list) => { this.suggestions.set(list); this.searching.set(false); },
+      error: () => {
+        this.searchError.set('Erreur lors de la recherche. Réessayez.');
+        this.searching.set(false);
       },
-      error: (err) => {
-        this.sending.set(false);
-        let msg = 'Erreur lors de l\'envoi. Réessayez.';
-        if (err.status === 404)      msg = 'Aucun utilisateur trouvé avec cet email.';
-        else if (err.status === 409) msg = 'Une demande existe déjà avec cet utilisateur.';
-        else if (err.status === 400) msg = 'Vous ne pouvez pas vous envoyer une demande à vous-même.';
-        this.sendFeedback.set({ type: 'error', msg });
+    });
+  }
+
+  addFriend(suggestion: FriendSuggestion) {
+    if (this.sendingId()) return;
+    this.sendingId.set(suggestion.id);
+
+    this.api.post<unknown>(`/friendships/request/${suggestion.id}`, {}).subscribe({
+      next: () => {
+        this.suggestions.update((list) =>
+          list.map((s) => (s.id === suggestion.id ? { ...s, relationshipStatus: 'pending_sent' as const } : s)),
+        );
+        this.sendingId.set(null);
+        this.loadAll();
+      },
+      error: () => {
+        this.sendingId.set(null);
       },
     });
   }
@@ -100,10 +126,6 @@ export class Friends implements OnInit {
       next:  () => this.pending.update(list => list.filter(p => p.friendshipId !== entry.friendshipId)),
       error: () => { /* silent */ },
     });
-  }
-
-  onSearchKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter') this.sendRequest();
   }
 
   initials(name: string): string {

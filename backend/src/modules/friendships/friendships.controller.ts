@@ -4,12 +4,14 @@ import {
   Post,
   Patch,
   Param,
+  Query,
   Body,
   UseGuards,
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { FriendshipsService } from './friendships.service';
 import { RequestByEmailDto } from './dto/request-by-email.dto';
+import { SearchUsersDto } from './dto/search-users.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -26,6 +28,11 @@ export class FriendshipsController {
   @Get('pending')
   getPending(@CurrentUser() user: { userId: string }) {
     return this.friendshipsService.getPendingEnriched(user.userId);
+  }
+
+  @Get('search')
+  search(@CurrentUser() user: { userId: string }, @Query() query: SearchUsersDto) {
+    return this.friendshipsService.search(user.userId, query.q);
   }
 
   @Post('request-by-email')
