@@ -17,7 +17,20 @@ interface DebateItem {
   question: string;
   sides: DebateSide[];
   createdAt: string;
+  totalVotes: number;
+  hasVoted: boolean;
+  myVoteSideId: string | null;
 }
+
+type DebateFilter = 'popular' | 'new' | 'unvoted' | 'voted' | 'mine';
+
+const FILTERS: { value: DebateFilter; label: string }[] = [
+  { value: 'popular', label: 'Populaires' },
+  { value: 'new',     label: 'Nouveaux' },
+  { value: 'unvoted', label: 'À voter' },
+  { value: 'voted',   label: 'Déjà votés' },
+  { value: 'mine',    label: 'Mes débats' },
+];
 
 @Component({
   selector: 'app-debates',
@@ -41,6 +54,13 @@ export class Debates implements OnInit {
   sideA       = 'Pour';
   sideB       = 'Contre';
 
+  readonly filters     = FILTERS;
+  activeFilter         = signal<DebateFilter>('new');
+  searchQuery          = '';
+  authorQuery          = '';
+
+  private searchTimeout?: ReturnType<typeof setTimeout>;
+
   ngOnInit() {
     this.loadDebates();
   }
@@ -48,10 +68,27 @@ export class Debates implements OnInit {
   loadDebates() {
     this.loading.set(true);
     this.error.set('');
-    this.api.get<DebateItem[]>('/debates').subscribe({
+
+    const params = new URLSearchParams();
+    params.set('filter', this.activeFilter());
+    if (this.searchQuery.trim())  params.set('q', this.searchQuery.trim());
+    if (this.authorQuery.trim()) params.set('author', this.authorQuery.trim());
+
+    this.api.get<DebateItem[]>(`/debates?${params.toString()}`).subscribe({
       next:  (list) => { this.debates.set(list);                                          this.loading.set(false); },
       error: ()     => { this.error.set('Impossible de charger les débats. Réessayez.'); this.loading.set(false); },
     });
+  }
+
+  selectFilter(filter: DebateFilter) {
+    if (this.activeFilter() === filter) return;
+    this.activeFilter.set(filter);
+    this.loadDebates();
+  }
+
+  onSearchInput() {
+    clearTimeout(this.searchTimeout);
+    this.searchTimeout = setTimeout(() => this.loadDebates(), 300);
   }
 
   toggleComposer() {
@@ -96,14 +133,9 @@ export class Debates implements OnInit {
     this.router.navigate(['/debates', id]);
   }
 
-  totalVotes(debate: DebateItem): number {
-    return debate.sides.reduce((sum, s) => sum + s.votesCount, 0);
-  }
-
   pct(side: DebateSide, debate: DebateItem): number {
-    const total = this.totalVotes(debate);
-    if (total === 0) return 50;
-    return Math.round((side.votesCount / total) * 100);
+    if (debate.totalVotes === 0) return 50;
+    return Math.round((side.votesCount / debate.totalVotes) * 100);
   }
 
   initials(name: string): string {

@@ -18,6 +18,29 @@
     </button>
   </div>
 
+  <!-- Filters -->
+  <div class="flex flex-wrap gap-2">
+    @for (f of filters; track f.value) {
+      <button (click)="selectFilter(f.value)"
+              class="text-xs font-medium px-3 py-1.5 rounded-full transition-colors"
+              [class.bg-indigo-600]="activeFilter() === f.value" [class.text-white]="activeFilter() === f.value"
+              [class.bg-gray-100]="activeFilter() !== f.value" [class.text-gray-600]="activeFilter() !== f.value"
+              [class.hover:bg-gray-200]="activeFilter() !== f.value">
+        {{ f.label }}
+      </button>
+    }
+  </div>
+
+  <!-- Search -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="onSearchInput()"
+           placeholder="Rechercher dans les débats..."
+           class="input-field text-sm" />
+    <input type="text" [(ngModel)]="authorQuery" (ngModelChange)="onSearchInput()"
+           placeholder="Filtrer par auteur..."
+           class="input-field text-sm" />
+  </div>
+
   <!-- Composer -->
   @if (showComposer()) {
     <div class="card">
@@ -120,9 +143,16 @@
               }
             </div>
 
-            <p class="mt-3 text-xs text-gray-400">
-              {{ totalVotes(debate) }} vote{{ totalVotes(debate) > 1 ? 's' : '' }}
-            </p>
+            <div class="mt-3 flex items-center gap-2">
+              <p class="text-xs text-gray-400">
+                {{ debate.totalVotes }} vote{{ debate.totalVotes > 1 ? 's' : '' }}
+              </p>
+              @if (debate.hasVoted) {
+                <span class="px-2 py-0.5 bg-green-50 text-green-700 text-xs font-medium rounded-full">Déjà voté</span>
+              } @else {
+                <span class="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs font-medium rounded-full">À voter</span>
+              }
+            </div>
           </div>
 
         </div>

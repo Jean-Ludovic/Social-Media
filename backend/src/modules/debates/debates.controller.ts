@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Param, ParseUUIDPipe, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, ParseUUIDPipe, Body, UseGuards } from '@nestjs/common';
 import { DebatesService } from './debates.service';
 import { CreateDebateDto } from './dto/create-debate.dto';
+import { FindDebatesDto } from './dto/find-debates.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -10,13 +11,13 @@ export class DebatesController {
   constructor(private readonly debatesService: DebatesService) {}
 
   @Get()
-  findAll() {
-    return this.debatesService.findAll();
+  findAll(@CurrentUser() user: { userId: string }, @Query() query: FindDebatesDto) {
+    return this.debatesService.findAll(user.userId, query);
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.debatesService.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: { userId: string }) {
+    return this.debatesService.findOne(id, user.userId);
   }
 
   @Post()

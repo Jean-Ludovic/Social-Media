@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../../core/services/api';
 
@@ -15,6 +15,9 @@ interface DebateData {
   question: string;
   sides: DebateSide[];
   createdAt: string;
+  totalVotes: number;
+  hasVoted: boolean;
+  myVoteSideId: string | null;
 }
 
 @Component({
@@ -27,15 +30,18 @@ export class DebateDetail implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly api   = inject(ApiService);
 
-  debate      = signal<DebateData | null>(null);
-  loading     = signal(true);
-  error       = signal('');
-  votedSideId = signal<string | null>(null);
-  voting      = signal(false);
+  debate  = signal<DebateData | null>(null);
+  loading = signal(true);
+  error   = signal('');
+  voting  = signal(false);
 
-  totalVotes = computed(() =>
-    this.debate()?.sides.reduce((sum, s) => sum + s.votesCount, 0) ?? 0
-  );
+  votedSideId(): string | null {
+    return this.debate()?.myVoteSideId ?? null;
+  }
+
+  totalVotes(): number {
+    return this.debate()?.totalVotes ?? 0;
+  }
 
   ngOnInit() {
     const id = this.route.snapshot.paramMap.get('id') ?? '';
@@ -63,7 +69,6 @@ export class DebateDetail implements OnInit {
     this.api.post<DebateData>(`/debates/${debateId}/vote/${sideId}`, {}).subscribe({
       next: (updated) => {
         this.debate.set(updated);
-        this.votedSideId.set(sideId);
         this.voting.set(false);
       },
       error: () => {
