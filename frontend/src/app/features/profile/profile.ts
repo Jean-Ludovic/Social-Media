@@ -3,10 +3,12 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/services/api';
 import { AuthService, UserProfile } from '../../core/services/auth';
+import { BackButton } from '../../core/components/back-button/back-button';
+import { Breadcrumb, BreadcrumbItem } from '../../core/components/breadcrumb/breadcrumb';
 
 @Component({
   selector: 'app-profile',
-  imports: [FormsModule],
+  imports: [FormsModule, BackButton, Breadcrumb],
   templateUrl: './profile.html',
   styleUrl: './profile.scss',
 })
@@ -14,6 +16,13 @@ export class Profile implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly auth  = inject(AuthService);
   private readonly api   = inject(ApiService);
+
+  breadcrumb(): BreadcrumbItem[] {
+    return [
+      { label: 'Accueil', link: '/feed' },
+      { label: this.profile()?.displayName ?? 'Profil' },
+    ];
+  }
 
   profile = signal<UserProfile | null>(null);
   loading = signal(true);

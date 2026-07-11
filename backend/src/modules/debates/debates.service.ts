@@ -4,9 +4,11 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateDebateDto } from './dto/create-debate.dto';
 import { FindDebatesDto } from './dto/find-debates.dto';
 
-// Shared include — author display name + all sides
+// Shared include — author display name, category, tags, all sides
 const debateInclude = {
   author: { select: { displayName: true } },
+  category: true,
+  postTags: { include: { tag: true } },
   debateSides: { orderBy: { votesCount: 'desc' as const } },
 } as const;
 
@@ -15,20 +17,24 @@ type DebatePost = {
   authorId: string;
   content: string;
   imageUrl: string | null;
+  categoryId: string | null;
   createdAt: Date;
   author: { displayName: string };
+  category: { id: string; name: string; slug: string; icon: string; color: string; description: string | null } | null;
+  postTags: { tag: { id: string; name: string; slug: string } }[];
   debateSides: { id: string; postId: string; label: string; votesCount: number }[];
 };
 
 // Maps a Prisma Post row (with includes) to the response shape expected by the frontend
 function toDebateResponse(post: DebatePost, myVoteSideId: string | null) {
-  const { content, author, debateSides, ...rest } = post;
+  const { content, author, debateSides, postTags, ...rest } = post;
   const totalVotes = debateSides.reduce((sum, s) => sum + s.votesCount, 0);
   return {
     ...rest,
     question: content,
     sides: debateSides,
     authorName: author.displayName,
+    tags: postTags.map((pt) => pt.tag),
     totalVotes,
     hasVoted: myVoteSideId !== null,
     myVoteSideId,
@@ -75,6 +81,16 @@ export class DebatesService {
       ...(query.author
         ? { author: { displayName: { contains: query.author, mode: 'insensitive' } } }
         : {}),
+      ...(query.category ? { category: { slug: query.category } } : {}),
+      ...(query.tag
+        ? {
+            AND: query.tag
+              .split(',')
+              .map((slug) => slug.trim())
+              .filter(Boolean)
+              .map((slug) => ({ postTags: { some: { tag: { slug } } } })),
+          }
+        : {}),
       ...(query.filter === 'mine' ? { authorId: userId } : {}),
     };
 
@@ -120,15 +136,22 @@ export class DebatesService {
   }
 
   async create(authorId: string, dto: CreateDebateDto) {
+    const category = await this.prisma.category.findUnique({ where: { id: dto.categoryId } });
+    if (!category) throw new NotFoundException('Category not found');
+
     const post = await this.prisma.post.create({
       data: {
         authorId,
         content: dto.question,
         type: 'debate',
         imageUrl: null,
+        categoryId: dto.categoryId,
         debateSides: {
           create: dto.sides.map((label) => ({ label })),
         },
+        postTags: dto.tagIds?.length
+          ? { create: dto.tagIds.map((tagId) => ({ tagId })) }
+          : undefined,
       },
       include: debateInclude,
     });

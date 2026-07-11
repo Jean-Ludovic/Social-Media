@@ -1,11 +1,28 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../../core/services/api';
+import { BackButton } from '../../../core/components/back-button/back-button';
+import { Breadcrumb, BreadcrumbItem } from '../../../core/components/breadcrumb/breadcrumb';
 
 interface DebateSide {
   id: string;
   label: string;
   votesCount: number;
+}
+
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  icon: string;
+  color: string;
+  description: string | null;
+}
+
+interface Tag {
+  id: string;
+  name: string;
+  slug: string;
 }
 
 interface DebateData {
@@ -18,11 +35,37 @@ interface DebateData {
   totalVotes: number;
   hasVoted: boolean;
   myVoteSideId: string | null;
+  category: Category | null;
+  tags: Tag[];
 }
+
+const CATEGORY_COLOR_CLASSES: Record<string, { bg: string; text: string }> = {
+  blue:    { bg: 'bg-blue-50',    text: 'text-blue-700' },
+  violet:  { bg: 'bg-violet-50',  text: 'text-violet-700' },
+  red:     { bg: 'bg-red-50',     text: 'text-red-700' },
+  green:   { bg: 'bg-green-50',   text: 'text-green-700' },
+  pink:    { bg: 'bg-pink-50',    text: 'text-pink-700' },
+  amber:   { bg: 'bg-amber-50',   text: 'text-amber-700' },
+  stone:   { bg: 'bg-stone-50',   text: 'text-stone-700' },
+  indigo:  { bg: 'bg-indigo-50',  text: 'text-indigo-700' },
+  cyan:    { bg: 'bg-cyan-50',    text: 'text-cyan-700' },
+  orange:  { bg: 'bg-orange-50',  text: 'text-orange-700' },
+  yellow:  { bg: 'bg-yellow-50',  text: 'text-yellow-700' },
+  slate:   { bg: 'bg-slate-50',   text: 'text-slate-700' },
+  sky:     { bg: 'bg-sky-50',     text: 'text-sky-700' },
+  rose:    { bg: 'bg-rose-50',    text: 'text-rose-700' },
+  fuchsia: { bg: 'bg-fuchsia-50', text: 'text-fuchsia-700' },
+  emerald: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  teal:    { bg: 'bg-teal-50',    text: 'text-teal-700' },
+  lime:    { bg: 'bg-lime-50',    text: 'text-lime-700' },
+  zinc:    { bg: 'bg-zinc-50',    text: 'text-zinc-700' },
+  gray:    { bg: 'bg-gray-50',    text: 'text-gray-700' },
+};
+const FALLBACK_CATEGORY_CLASSES = { bg: 'bg-gray-50', text: 'text-gray-700' };
 
 @Component({
   selector: 'app-debate-detail',
-  imports: [],
+  imports: [BackButton, Breadcrumb],
   templateUrl: './debate-detail.html',
   styleUrl: './debate-detail.scss',
 })
@@ -41,6 +84,19 @@ export class DebateDetail implements OnInit {
 
   totalVotes(): number {
     return this.debate()?.totalVotes ?? 0;
+  }
+
+  breadcrumb(): BreadcrumbItem[] {
+    const question = this.debate()?.question ?? 'Débat';
+    return [
+      { label: 'Accueil', link: '/feed' },
+      { label: 'Débats', link: '/debates' },
+      { label: question.length > 40 ? question.slice(0, 40) + '…' : question },
+    ];
+  }
+
+  categoryClasses(color: string) {
+    return CATEGORY_COLOR_CLASSES[color] ?? FALLBACK_CATEGORY_CLASSES;
   }
 
   ngOnInit() {

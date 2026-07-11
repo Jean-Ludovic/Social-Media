@@ -1,14 +1,14 @@
-<div class="max-w-3xl mx-auto py-8 px-4 space-y-5">
+<div class="max-w-3xl mx-auto py-8 px-4 space-y-5 route-fade-in">
 
   <!-- Header -->
   <div class="flex items-center justify-between">
     <h2 class="text-2xl font-bold text-gray-900">Débats</h2>
-    <button (click)="toggleComposer()"
+    <button (click)="toggleComposer()" [attr.aria-expanded]="showComposer()" aria-label="Créer un nouveau débat"
             class="text-sm font-medium px-4 py-2 rounded-xl transition-colors flex items-center gap-2"
             [class.bg-indigo-600]="!showComposer()" [class.hover:bg-indigo-700]="!showComposer()" [class.text-white]="!showComposer()"
             [class.bg-gray-100]="showComposer()" [class.hover:bg-gray-200]="showComposer()" [class.text-gray-700]="showComposer()">
       @if (!showComposer()) {
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
         </svg>
         Nouveau débat
@@ -19,9 +19,9 @@
   </div>
 
   <!-- Filters -->
-  <div class="flex flex-wrap gap-2">
+  <div class="flex flex-wrap gap-2" role="group" aria-label="Filtrer les débats">
     @for (f of filters; track f.value) {
-      <button (click)="selectFilter(f.value)"
+      <button (click)="selectFilter(f.value)" [attr.aria-pressed]="activeFilter() === f.value"
               class="text-xs font-medium px-3 py-1.5 rounded-full transition-colors"
               [class.bg-indigo-600]="activeFilter() === f.value" [class.text-white]="activeFilter() === f.value"
               [class.bg-gray-100]="activeFilter() !== f.value" [class.text-gray-600]="activeFilter() !== f.value"
@@ -34,12 +34,40 @@
   <!-- Search -->
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
     <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="onSearchInput()"
-           placeholder="Rechercher dans les débats..."
+           placeholder="Rechercher dans les débats..." aria-label="Rechercher dans les débats"
            class="input-field text-sm" />
-    <input type="text" [(ngModel)]="authorQuery" (ngModelChange)="onSearchInput()"
-           placeholder="Filtrer par auteur..."
+    <input type="text" [(ngModel)]="authorQuery" (ngModelChange)="onAuthorInput()"
+           placeholder="Filtrer par auteur..." aria-label="Filtrer par auteur"
            class="input-field text-sm" />
   </div>
+
+  <!-- Category filter -->
+  <div>
+    <label class="block text-xs font-medium text-gray-500 mb-1.5" for="category-filter">Catégorie</label>
+    <select id="category-filter" class="input-field text-sm" [ngModel]="selectedCategory()" (ngModelChange)="selectCategory($event)">
+      <option value="">Toutes</option>
+      @for (c of categories(); track c.id) {
+        <option [value]="c.slug">{{ c.icon }} {{ c.name }}</option>
+      }
+    </select>
+  </div>
+
+  <!-- Tag filter -->
+  @if (tags().length > 0) {
+    <div>
+      <p class="text-xs font-medium text-gray-500 mb-1.5">Tags</p>
+      <div class="flex flex-wrap gap-2" role="group" aria-label="Filtrer par tags">
+        @for (t of tags(); track t.id) {
+          <button (click)="toggleTag(t.slug)" [attr.aria-pressed]="selectedTags().has(t.slug)"
+                  class="text-xs font-medium px-2.5 py-1 rounded-full transition-colors border"
+                  [class.bg-indigo-600]="selectedTags().has(t.slug)" [class.text-white]="selectedTags().has(t.slug)" [class.border-indigo-600]="selectedTags().has(t.slug)"
+                  [class.bg-white]="!selectedTags().has(t.slug)" [class.text-gray-500]="!selectedTags().has(t.slug)" [class.border-gray-200]="!selectedTags().has(t.slug)" [class.hover:bg-gray-50]="!selectedTags().has(t.slug)">
+            {{ t.name }}
+          </button>
+        }
+      </div>
+    </div>
+  }
 
   <!-- Composer -->
   @if (showComposer()) {
@@ -48,24 +76,50 @@
       <form (ngSubmit)="submitDebate()" class="space-y-4">
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1.5">Question</label>
-          <textarea name="newQuestion" [(ngModel)]="newQuestion" rows="2"
+          <label class="block text-sm font-medium text-gray-700 mb-1.5" for="new-question">Question</label>
+          <textarea id="new-question" name="newQuestion" [(ngModel)]="newQuestion" rows="2"
                     class="input-field text-sm resize-none"
                     placeholder="Posez votre question de débat..."></textarea>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-sm font-medium text-indigo-600 mb-1.5">Position A</label>
-            <input type="text" name="sideA" [(ngModel)]="sideA"
+            <label class="block text-sm font-medium text-indigo-600 mb-1.5" for="new-side-a">Position A</label>
+            <input id="new-side-a" type="text" name="sideA" [(ngModel)]="sideA"
                    class="input-field text-sm" placeholder="Pour" />
           </div>
           <div>
-            <label class="block text-sm font-medium text-orange-500 mb-1.5">Position B</label>
-            <input type="text" name="sideB" [(ngModel)]="sideB"
+            <label class="block text-sm font-medium text-orange-500 mb-1.5" for="new-side-b">Position B</label>
+            <input id="new-side-b" type="text" name="sideB" [(ngModel)]="sideB"
                    class="input-field text-sm" placeholder="Contre" />
           </div>
         </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5" for="new-category">Catégorie</label>
+          <select id="new-category" name="newCategoryId" [(ngModel)]="newCategoryId" class="input-field text-sm">
+            <option value="" disabled>Choisir une catégorie...</option>
+            @for (c of categories(); track c.id) {
+              <option [value]="c.id">{{ c.icon }} {{ c.name }}</option>
+            }
+          </select>
+        </div>
+
+        @if (tags().length > 0) {
+          <div>
+            <p class="text-sm font-medium text-gray-700 mb-1.5">Tags <span class="text-gray-400 font-normal">(jusqu'à 5)</span></p>
+            <div class="flex flex-wrap gap-2" role="group" aria-label="Choisir des tags pour ce débat">
+              @for (t of tags(); track t.id) {
+                <button type="button" (click)="toggleNewTag(t.id)" [attr.aria-pressed]="newTagIds().has(t.id)"
+                        class="text-xs font-medium px-2.5 py-1 rounded-full transition-colors border"
+                        [class.bg-indigo-600]="newTagIds().has(t.id)" [class.text-white]="newTagIds().has(t.id)" [class.border-indigo-600]="newTagIds().has(t.id)"
+                        [class.bg-white]="!newTagIds().has(t.id)" [class.text-gray-500]="!newTagIds().has(t.id)" [class.border-gray-200]="!newTagIds().has(t.id)" [class.hover:bg-gray-50]="!newTagIds().has(t.id)">
+                  {{ t.name }}
+                </button>
+              }
+            </div>
+          </div>
+        }
 
         @if (postError) {
           <div class="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{{ postError }}</div>
@@ -103,26 +157,42 @@
       <svg class="w-10 h-10 mx-auto mb-3 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
       </svg>
-      <p class="text-sm">Aucun débat pour l'instant.<br>Lancez la conversation !</p>
+      <p class="text-sm">Aucun débat ne correspond à ces filtres.</p>
     </div>
   }
 
   <!-- Debates list -->
   @else {
     @for (debate of debates(); track debate.id) {
-      <div class="card cursor-pointer hover:shadow-md transition-shadow" (click)="openDetail(debate.id)">
+      <div class="card cursor-pointer hover:shadow-md transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+           role="link" tabindex="0" [attr.aria-label]="'Ouvrir le débat : ' + debate.question"
+           (click)="openDetail(debate.id)" (keydown.enter)="openDetail(debate.id)" (keydown.space)="openDetail(debate.id); $event.preventDefault()">
         <div class="flex items-start gap-3">
 
           <div class="w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-xs shrink-0"
                [style.background]="avatarColor(debate.authorId)">{{ initials(debate.authorName) }}</div>
 
           <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-1">
+            <div class="flex items-center gap-2 mb-1 flex-wrap">
               <span class="text-sm font-medium text-gray-700">{{ debate.authorName }}</span>
               <span class="text-xs text-gray-400">· {{ formatTime(debate.createdAt) }}</span>
+              @if (debate.category) {
+                <span class="px-2 py-0.5 text-xs font-medium rounded-full"
+                      [class]="categoryClasses(debate.category.color).bg + ' ' + categoryClasses(debate.category.color).text">
+                  {{ debate.category.icon }} {{ debate.category.name }}
+                </span>
+              }
             </div>
 
             <h3 class="font-semibold text-gray-900 text-base leading-snug">{{ debate.question }}</h3>
+
+            @if (debate.tags.length > 0) {
+              <div class="mt-1.5 flex flex-wrap gap-1.5">
+                @for (t of debate.tags; track t.id) {
+                  <span class="px-2 py-0.5 bg-gray-100 text-gray-500 text-xs rounded-full">#{{ t.name }}</span>
+                }
+              </div>
+            }
 
             <!-- Vote bars -->
             <div class="mt-4 space-y-2">

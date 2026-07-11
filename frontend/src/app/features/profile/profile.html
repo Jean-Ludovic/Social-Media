@@ -1,4 +1,10 @@
-<div class="max-w-3xl mx-auto py-8 px-4">
+<div class="max-w-3xl mx-auto py-8 px-4 route-fade-in">
+
+  <!-- Back + breadcrumb -->
+  <div class="space-y-2 mb-4">
+    <app-back-button fallbackUrl="/feed" />
+    <app-breadcrumb [items]="breadcrumb()" />
+  </div>
 
   <!-- Loading -->
   @if (loading()) {

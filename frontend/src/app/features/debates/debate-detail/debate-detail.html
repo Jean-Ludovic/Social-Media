@@ -1,4 +1,10 @@
-<div class="max-w-3xl mx-auto py-8 px-4 space-y-6">
+<div class="max-w-3xl mx-auto py-8 px-4 space-y-6 route-fade-in">
+
+  <!-- Back + breadcrumb -->
+  <div class="space-y-2">
+    <app-back-button fallbackUrl="/debates" />
+    <app-breadcrumb [items]="breadcrumb()" />
+  </div>
 
   <!-- Loading -->
   @if (loading()) {
@@ -24,13 +30,29 @@
       <div class="flex items-center gap-3 mb-5">
         <div class="w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-xs shrink-0"
              [style.background]="avatarColor(d.authorId)">{{ initials(d.authorName) }}</div>
-        <div>
+        <div class="flex-1 min-w-0">
           <p class="text-sm font-medium text-gray-800">{{ d.authorName }}</p>
           <p class="text-xs text-gray-400">{{ formatTime(d.createdAt) }}</p>
         </div>
+        @if (d.category) {
+          <span class="px-2.5 py-1 text-xs font-medium rounded-full shrink-0"
+                [class]="categoryClasses(d.category.color).bg + ' ' + categoryClasses(d.category.color).text">
+            {{ d.category.icon }} {{ d.category.name }}
+          </span>
+        }
       </div>
 
-      <h2 class="text-xl font-bold text-gray-900 mb-6">{{ d.question }}</h2>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">{{ d.question }}</h2>
+
+      @if (d.tags.length > 0) {
+        <div class="mb-6 flex flex-wrap gap-1.5">
+          @for (t of d.tags; track t.id) {
+            <span class="px-2 py-0.5 bg-gray-100 text-gray-500 text-xs rounded-full">#{{ t.name }}</span>
+          }
+        </div>
+      } @else {
+        <div class="mb-6"></div>
+      }
 
       <!-- Vote prompt / result label -->
       @if (!votedSideId()) {
@@ -46,6 +68,8 @@
         @for (side of d.sides; track side.id; let i = $index) {
           <button (click)="vote(side.id)"
                   [disabled]="!!votedSideId() || voting()"
+                  [attr.aria-pressed]="votedSideId() === side.id"
+                  [attr.aria-label]="'Voter pour ' + side.label"
                   class="w-full text-left p-4 rounded-xl border-2 transition-all duration-200 disabled:cursor-default"
                   [class.border-indigo-500]="i===0"
                   [class.bg-indigo-50]="i===0"

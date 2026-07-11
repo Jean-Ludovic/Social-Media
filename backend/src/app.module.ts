@@ -12,6 +12,8 @@ import { MessagesModule } from './modules/messages/messages.module';
 import { StatusesModule } from './modules/statuses/statuses.module';
 import { LivesModule } from './modules/lives/lives.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { CategoriesModule } from './modules/categories/categories.module';
+import { TagsModule } from './modules/tags/tags.module';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     StatusesModule,
     LivesModule,
     NotificationsModule,
+    CategoriesModule,
+    TagsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

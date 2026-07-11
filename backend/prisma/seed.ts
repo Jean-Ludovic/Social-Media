@@ -82,18 +82,67 @@ const POST_CONTENTS = [
   'On a enfin supprimé toutes les données mockées du backend. Que d\'émotions.',
 ];
 
-// ─── 3. Debates ──────────────────────────────────────────────────────────────
+// ─── 3. Categories & tags ────────────────────────────────────────────────────
+
+const CATEGORY_SEED = [
+  { name: 'Technologie',    icon: '💻', color: 'blue',     description: 'Innovations, gadgets et tendances tech.' },
+  { name: 'IA',             icon: '🤖', color: 'violet',   description: 'Intelligence artificielle, machine learning et LLM.' },
+  { name: 'Politique',      icon: '🏛️', color: 'red',      description: 'Débats de société et actualité politique.' },
+  { name: 'Football',       icon: '⚽', color: 'green',    description: 'Clubs, compétitions et stars du ballon rond.' },
+  { name: 'Musique',        icon: '🎵', color: 'pink',     description: 'Genres musicaux, artistes et concerts.' },
+  { name: 'Cinéma',         icon: '🎬', color: 'amber',    description: 'Films, séries et industrie du cinéma.' },
+  { name: 'Religion',       icon: '🕊️', color: 'stone',    description: 'Spiritualité, croyances et débats religieux.' },
+  { name: 'Philosophie',    icon: '🧠', color: 'indigo',   description: 'Questions existentielles et courants de pensée.' },
+  { name: 'Science',        icon: '🔬', color: 'cyan',     description: 'Découvertes scientifiques et recherche.' },
+  { name: 'Histoire',       icon: '📜', color: 'orange',   description: 'Événements marquants et grandes figures du passé.' },
+  { name: 'Finance',        icon: '💰', color: 'yellow',   description: 'Marchés, investissement et économie.' },
+  { name: 'Business',       icon: '💼', color: 'slate',    description: 'Entrepreneuriat, startups et stratégie d\'entreprise.' },
+  { name: 'Voyage',         icon: '✈️', color: 'sky',      description: 'Destinations, road trips et découvertes culturelles.' },
+  { name: 'Cuisine',        icon: '🍳', color: 'rose',     description: 'Recettes, gastronomie et cultures culinaires.' },
+  { name: 'Gaming',         icon: '🎮', color: 'fuchsia',  description: 'Jeux vidéo, esport et culture gamer.' },
+  { name: 'Sports',         icon: '🏆', color: 'emerald',  description: 'Tous les sports, compétitions et performances.' },
+  { name: 'Santé',          icon: '🩺', color: 'teal',     description: 'Bien-être, médecine et santé publique.' },
+  { name: 'Éducation',      icon: '🎓', color: 'lime',     description: 'Apprentissage, pédagogie et système scolaire.' },
+  { name: 'Programmation',  icon: '👨‍💻', color: 'zinc',    description: 'Langages, frameworks et bonnes pratiques de code.' },
+  { name: 'Actualités',     icon: '📰', color: 'gray',     description: 'Actualité générale et faits de société.' },
+] as const;
+
+const TAG_SEED = [
+  'Angular', 'React', 'Vue', 'NestJS', 'Express', 'Django', 'Docker', 'Kubernetes', 'Linux', 'Windows',
+  'macOS', 'TypeScript', 'JavaScript', 'Python', 'Rust', 'Go', 'Java', 'PHP', 'SQL', 'NoSQL',
+  'PostgreSQL', 'MongoDB', 'Redis', 'GraphQL', 'REST', 'AWS', 'Azure', 'GCP', 'OpenAI', 'Claude',
+  'Gemini', 'Crypto', 'Bitcoin', 'Tesla', 'SpaceX', 'Messi', 'Ronaldo', 'Mbappé', 'NBA', 'Formule1',
+  'Netflix', 'Marvel', 'PS5', 'Xbox', 'Nintendo', 'Climat', 'Vegan', 'RemoteWork', 'Startup', 'Productivité',
+] as const;
+
+function slugify(value: string): string {
+  return value
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+// ─── 4. Debates ──────────────────────────────────────────────────────────────
 
 const DEBATE_SEED = [
-  { question: 'Angular vs React : quel framework préférez-vous ?', sides: ['Angular', 'React'] },
-  { question: 'NestJS vs Express : lequel pour vos APIs ?', sides: ['NestJS', 'Express'] },
-  { question: 'SQL vs NoSQL : quelle base de données pour 2025 ?', sides: ['SQL', 'NoSQL'] },
-  { question: 'Docker ou Podman ?', sides: ['Docker', 'Podman'] },
-  { question: 'TypeScript obligatoire sur tout nouveau projet JS ?', sides: ['Pour', 'Contre'] },
-  { question: 'Linux vs Windows pour le développement ?', sides: ['Linux', 'Windows'] },
-  { question: 'Monolithe ou Microservices pour une startup ?', sides: ['Monolithe', 'Microservices'] },
-  { question: 'L\'IA va-t-elle remplacer les développeurs ?', sides: ['Oui', 'Non'] },
-];
+  { question: 'React ou Angular en 2026 ?', sides: ['React', 'Angular'], category: 'Programmation', tags: ['React', 'Angular', 'TypeScript'] },
+  { question: 'NestJS vs Express : lequel pour vos APIs ?', sides: ['NestJS', 'Express'], category: 'Programmation', tags: ['NestJS', 'Express', 'TypeScript'] },
+  { question: 'SQL ou NoSQL : quelle base de données pour 2026 ?', sides: ['SQL', 'NoSQL'], category: 'Programmation', tags: ['SQL', 'NoSQL', 'PostgreSQL', 'MongoDB'] },
+  { question: 'Pourquoi Kubernetes est-il devenu incontournable ?', sides: ['Indispensable', 'Surestimé'], category: 'Technologie', tags: ['Kubernetes', 'Docker', 'AWS'] },
+  { question: 'Linux est-il réellement supérieur à Windows ?', sides: ['Linux', 'Windows'], category: 'Technologie', tags: ['Linux', 'Windows'] },
+  { question: 'L\'IA remplacera-t-elle les développeurs ?', sides: ['Oui', 'Non'], category: 'IA', tags: ['OpenAI', 'Claude', 'Gemini'] },
+  { question: 'Claude ou ChatGPT : quel assistant IA préférez-vous ?', sides: ['Claude', 'ChatGPT'], category: 'IA', tags: ['Claude', 'OpenAI', 'Gemini'] },
+  { question: 'Le remote est-il meilleur que le présentiel ?', sides: ['Remote', 'Présentiel'], category: 'Business', tags: ['RemoteWork', 'Productivité', 'Startup'] },
+  { question: 'Messi est-il le GOAT ?', sides: ['Oui', 'Non'], category: 'Football', tags: ['Messi', 'Ronaldo', 'Mbappé'] },
+  { question: 'Mbappé peut-il devenir le meilleur joueur du monde ?', sides: ['Oui', 'Non'], category: 'Football', tags: ['Mbappé', 'Messi', 'Ronaldo'] },
+  { question: 'Le nucléaire est-il une solution écologique ?', sides: ['Oui', 'Non'], category: 'Politique', tags: ['Climat', 'Tesla'] },
+  { question: 'Faut-il taxer davantage les cryptomonnaies ?', sides: ['Pour', 'Contre'], category: 'Finance', tags: ['Crypto', 'Bitcoin'] },
+  { question: 'Bitcoin va-t-il remplacer l\'or comme valeur refuge ?', sides: ['Oui', 'Non'], category: 'Finance', tags: ['Bitcoin', 'Crypto'] },
+  { question: 'PS5 ou Xbox : quelle console domine cette génération ?', sides: ['PS5', 'Xbox'], category: 'Gaming', tags: ['PS5', 'Xbox', 'Nintendo'] },
+  { question: 'Le véganisme est-il vraiment la solution pour la planète ?', sides: ['Oui', 'Non'], category: 'Santé', tags: ['Vegan', 'Climat'] },
+  { question: 'Marvel a-t-il perdu sa magie depuis Avengers Endgame ?', sides: ['Oui', 'Non'], category: 'Cinéma', tags: ['Marvel', 'Netflix'] },
+] as const;
 
 // ─── 4. Comment templates ────────────────────────────────────────────────────
 
@@ -170,9 +219,41 @@ async function clearDatabase() {
     prisma.comment.deleteMany(),
     prisma.debateVote.deleteMany(),
     prisma.debateSide.deleteMany(),
+    prisma.postTag.deleteMany(),
     prisma.post.deleteMany(),
+    prisma.category.deleteMany(),
+    prisma.tag.deleteMany(),
     prisma.user.deleteMany(),
   ]);
+}
+
+async function seedCategories() {
+  const rows = CATEGORY_SEED.map((c) => ({
+    id: randomUUID(),
+    name: c.name,
+    slug: slugify(c.name),
+    icon: c.icon,
+    color: c.color,
+    description: c.description,
+    createdAt: daysAgo(90),
+  }));
+
+  await prisma.category.createMany({ data: rows });
+  console.log(`  -> ${rows.length} categories created`);
+  return rows;
+}
+
+async function seedTags() {
+  const rows = TAG_SEED.map((name) => ({
+    id: randomUUID(),
+    name,
+    slug: slugify(name),
+    createdAt: daysAgo(90),
+  }));
+
+  await prisma.tag.createMany({ data: rows });
+  console.log(`  -> ${rows.length} tags created`);
+  return rows;
 }
 
 async function seedUsers(): Promise<Record<UserKey, { id: string; displayName: string }>> {
@@ -214,8 +295,14 @@ async function seedPosts(users: Record<UserKey, { id: string; displayName: strin
   return rows;
 }
 
-async function seedDebates(users: Record<UserKey, { id: string; displayName: string }>) {
+async function seedDebates(
+  users: Record<UserKey, { id: string; displayName: string }>,
+  categories: { id: string; name: string }[],
+  tags: { id: string; name: string }[],
+) {
   const keys = USER_SEED.map((u) => u.key);
+  const categoryIdByName = new Map(categories.map((c) => [c.name, c.id]));
+  const tagIdByName = new Map(tags.map((t) => [t.name, t.id]));
 
   const debatePosts = DEBATE_SEED.map((d, i) => ({
     id: randomUUID(),
@@ -223,9 +310,19 @@ async function seedDebates(users: Record<UserKey, { id: string; displayName: str
     content: d.question,
     imageUrl: null,
     type: PostType.debate,
+    categoryId: categoryIdByName.get(d.category)!,
     createdAt: daysAgo(25 - i * 2),
   }));
   await prisma.post.createMany({ data: debatePosts });
+
+  const postTagRows = DEBATE_SEED.flatMap((d, i) =>
+    d.tags.map((tagName) => ({
+      id: randomUUID(),
+      postId: debatePosts[i].id,
+      tagId: tagIdByName.get(tagName)!,
+    })),
+  );
+  await prisma.postTag.createMany({ data: postTagRows });
 
   const sidesByDebate: { postId: string; sideAId: string; sideBId: string }[] = [];
   const sideRows: { id: string; postId: string; label: string; votesCount: number }[] = [];
@@ -609,11 +706,17 @@ async function main() {
   const users = await seedUsers();
   console.log(`  -> ${USER_SEED.length} users created`);
 
+  console.log('Seeding categories...');
+  const categories = await seedCategories();
+
+  console.log('Seeding tags...');
+  const tags = await seedTags();
+
   console.log('Seeding posts...');
   const posts = await seedPosts(users);
 
   console.log('Seeding debates...');
-  const debates = await seedDebates(users);
+  const debates = await seedDebates(users, categories, tags);
 
   const allPosts = [...posts, ...debates.debatePosts];
 
