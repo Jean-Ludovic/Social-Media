@@ -5,6 +5,16 @@ import { PrismaService } from './prisma/prisma.service';
 export class AppController {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Liveness: the process answers HTTP. Deliberately does not touch the database, so a
+   * database outage does not make the platform restart or roll back healthy containers.
+   */
+  @Get('health/live')
+  live() {
+    return { status: 'ok', service: 'reseau-social-backend', timestamp: new Date().toISOString() };
+  }
+
+  /** Readiness: the process answers AND PostgreSQL is reachable (503 otherwise). */
   @Get('health')
   async health() {
     try {

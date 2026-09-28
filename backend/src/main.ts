@@ -6,6 +6,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.setGlobalPrefix('api');
+  // Containers are stopped with SIGTERM: close HTTP and database connections cleanly.
+  app.enableShutdownHooks();
 
   app.useGlobalPipes(
     new ValidationPipe({

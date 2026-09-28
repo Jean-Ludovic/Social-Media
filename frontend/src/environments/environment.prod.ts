@@ -1,6 +1,5 @@
 export const environment = {
   production: true,
-  // TODO: replace with the real production backend URL once confirmed (see docs/ARCHITECTURE.md — "à définir").
-  // Relative path assumes the frontend is served behind the same reverse proxy as the API.
+  // Same origin as the SPA: CloudFront routes /api/* to the backend (see docs/DEPLOYMENT_AWS.md).
   apiUrl: '/api',
 };
