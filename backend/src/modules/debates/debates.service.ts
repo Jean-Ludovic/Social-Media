@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { FriendshipsService } from '../friendships/friendships.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateDebateDto } from './dto/create-debate.dto';
 import { FindDebatesDto } from './dto/find-debates.dto';
 
@@ -43,35 +45,18 @@ function toDebateResponse(post: DebatePost, myVoteSideId: string | null) {
 
 @Injectable()
 export class DebatesService {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private async getAcceptedFriendIds(userId: string): Promise<string[]> {
-    const friendships = await this.prisma.friendship.findMany({
-      where: {
-        status: 'accepted',
-        OR: [{ requesterId: userId }, { receiverId: userId }],
-      },
-      select: { requesterId: true, receiverId: true },
-    });
-    return friendships.map((f) => (f.requesterId === userId ? f.receiverId : f.requesterId));
-  }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly friendships: FriendshipsService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   private async isVisibleAuthor(authorId: string, userId: string): Promise<boolean> {
-    if (authorId === userId) return true;
-    const friendship = await this.prisma.friendship.findFirst({
-      where: {
-        status: 'accepted',
-        OR: [
-          { requesterId: userId, receiverId: authorId },
-          { requesterId: authorId, receiverId: userId },
-        ],
-      },
-    });
-    return !!friendship;
+    return authorId === userId || this.friendships.areFriends(userId, authorId);
   }
 
   async findAll(userId: string, query: FindDebatesDto) {
-    const friendIds = await this.getAcceptedFriendIds(userId);
+    const friendIds = await this.friendships.getFriendIds(userId);
     const visibleAuthorIds = [userId, ...friendIds];
 
     const where: Prisma.PostWhereInput = {
@@ -190,6 +175,16 @@ export class DebatesService {
         throw new ConflictException('Already voted in this debate');
       }
       throw error;
+    }
+
+    if (debate.authorId !== userId) {
+      const voter = await this.prisma.user.findUnique({ where: { id: userId }, select: { displayName: true } });
+      await this.notifications.notify(
+        debate.authorId,
+        'debate',
+        `${voter?.displayName ?? "Quelqu'un"} a voté sur votre débat « ${debate.content} ».`,
+        debateId,
+      );
     }
 
     // Return the updated debate with fresh vote counts

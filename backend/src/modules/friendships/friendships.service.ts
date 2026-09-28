@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { FriendshipStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export interface FriendEntry {
   friendshipId: string;
@@ -34,7 +35,22 @@ const displayNameSelect = { select: { displayName: true } } as const;
 
 @Injectable()
 export class FriendshipsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
+
+  /** Ids of every user with an accepted friendship with userId, whichever side sent the request. */
+  async getFriendIds(userId: string): Promise<string[]> {
+    const friendships = await this.prisma.friendship.findMany({
+      where: {
+        status: 'accepted',
+        OR: [{ requesterId: userId }, { receiverId: userId }],
+      },
+      select: { requesterId: true, receiverId: true },
+    });
+    return friendships.map((f) => (f.requesterId === userId ? f.receiverId : f.requesterId));
+  }
 
   /** True only if an accepted friendship exists between the two users, whichever of them sent the request. */
   async areFriends(userIdA: string, userIdB: string): Promise<boolean> {
@@ -98,9 +114,26 @@ export class FriendshipsService {
     });
     if (existing) throw new ConflictException('Friendship already exists');
 
-    return this.prisma.friendship.create({
-      data: { requesterId, receiverId },
-    });
+    let friendship;
+    try {
+      friendship = await this.prisma.friendship.create({
+        data: { requesterId, receiverId },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+        throw new NotFoundException('User not found');
+      }
+      throw error;
+    }
+
+    const requester = await this.prisma.user.findUnique({ where: { id: requesterId }, select: { displayName: true } });
+    await this.notifications.notify(
+      receiverId,
+      'friend_request',
+      `${requester?.displayName ?? "Quelqu'un"} vous a envoyé une demande d'ami.`,
+      friendship.id,
+    );
+    return friendship;
   }
 
   async search(currentUserId: string, q: string): Promise<UserSearchResult[]> {

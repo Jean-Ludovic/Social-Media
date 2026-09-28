@@ -1,5 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/services/api';
 
 interface FriendEntry {
@@ -26,7 +27,7 @@ interface FriendSuggestion {
 
 @Component({
   selector: 'app-friends',
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   templateUrl: './friends.html',
   styleUrl: './friends.scss',
 })

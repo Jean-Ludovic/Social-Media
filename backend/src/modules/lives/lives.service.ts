@@ -1,6 +1,8 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { FriendshipsService } from '../friendships/friendships.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateLiveDto } from './dto/create-live.dto';
 import { LiveStatusFilter } from './dto/find-lives.dto';
 
@@ -18,7 +20,11 @@ function toLiveResponse({ host, ...live }: LiveWithHost) {
 
 @Injectable()
 export class LivesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly friendships: FriendshipsService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async findAll(status: LiveStatusFilter = 'active') {
     const where: Prisma.LiveWhereInput =
@@ -64,6 +70,14 @@ export class LivesService {
       },
       include: hostSelect,
     });
+
+    const friendIds = await this.friendships.getFriendIds(hostId);
+    await this.notifications.notifyMany(
+      friendIds,
+      'live',
+      `${live.host.displayName} a démarré un live : ${live.title}`,
+      live.id,
+    );
     return toLiveResponse(live);
   }
 

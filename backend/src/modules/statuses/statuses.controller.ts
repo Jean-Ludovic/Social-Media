@@ -19,13 +19,16 @@ export class StatusesController {
   constructor(private readonly statusesService: StatusesService) {}
 
   @Get()
-  findActive() {
-    return this.statusesService.findActive();
+  findActive(@CurrentUser() user: { userId: string }) {
+    return this.statusesService.findActive(user.userId);
   }
 
   @Get('user/:userId')
-  findActiveByUser(@Param('userId', ParseUUIDPipe) userId: string) {
-    return this.statusesService.findActiveByUser(userId);
+  findActiveByUser(
+    @CurrentUser() user: { userId: string },
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
+    return this.statusesService.findActiveByUser(user.userId, userId);
   }
 
   @Post()

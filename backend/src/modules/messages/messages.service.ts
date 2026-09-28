@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { FriendshipsService } from '../friendships/friendships.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 
 const messageSelect = {
@@ -20,6 +21,7 @@ export class MessagesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly friendships: FriendshipsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private async assertFriends(userId: string, partnerId: string) {
@@ -102,7 +104,7 @@ export class MessagesService {
 
   async sendToPartner(senderId: string, receiverId: string, dto: CreateMessageDto) {
     const conversation = await this.getOrCreatePrivateConversation(senderId, receiverId);
-    return this.writeMessage(conversation.id, senderId, dto);
+    return this.writeMessage(conversation.id, senderId, dto, [receiverId]);
   }
 
   /** Sending requires being a participant AND still being an accepted friend of every other participant. */
@@ -114,15 +116,21 @@ export class MessagesService {
     if (!participants.some((p) => p.userId === senderId)) {
       throw new ForbiddenException('Not a participant in this conversation');
     }
-    for (const { userId } of participants) {
-      if (userId !== senderId) await this.assertFriends(senderId, userId);
+    const recipientIds = participants.map((p) => p.userId).filter((id) => id !== senderId);
+    for (const userId of recipientIds) {
+      await this.assertFriends(senderId, userId);
     }
 
-    return this.writeMessage(conversationId, senderId, dto);
+    return this.writeMessage(conversationId, senderId, dto, recipientIds);
   }
 
   /** No authorization here: callers must have checked participation and friendship. */
-  private async writeMessage(conversationId: string, senderId: string, dto: CreateMessageDto) {
+  private async writeMessage(
+    conversationId: string,
+    senderId: string,
+    dto: CreateMessageDto,
+    recipientIds: string[],
+  ) {
     const [message] = await this.prisma.$transaction([
       this.prisma.message.create({
         data: { conversationId, senderId, content: dto.content },
@@ -133,6 +141,17 @@ export class MessagesService {
         data: { lastMessageAt: new Date() },
       }),
     ]);
+
+    const sender = await this.prisma.user.findUnique({ where: { id: senderId }, select: { displayName: true } });
+    for (const recipientId of recipientIds) {
+      await this.notifications.notify(
+        recipientId,
+        'message',
+        `${sender?.displayName ?? "Quelqu'un"} vous a envoyé un message.`,
+        senderId,
+        { skipIfUnread: true },
+      );
+    }
 
     return message;
   }

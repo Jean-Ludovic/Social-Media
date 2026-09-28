@@ -627,7 +627,7 @@ async function seedNotifications(
         userId: postAuthorById.get(c.postId)!,
         type: NotificationType.comment,
         message: `${nameById.get(c.authorId)} a commenté votre publication.`,
-        relatedId: c.id,
+        relatedId: c.postId,
         read: i % 3 !== 0,
         createdAt: daysAgo(4 - Math.floor(i / 2)),
       });
@@ -643,7 +643,7 @@ async function seedNotifications(
         userId: postAuthorById.get(r.postId)!,
         type: NotificationType.like,
         message: `${nameById.get(r.userId)} a aimé votre publication.`,
-        relatedId: r.id,
+        relatedId: r.postId,
         read: i % 2 === 0,
         createdAt: daysAgo(3 - Math.floor(i / 3)),
       });
@@ -672,7 +672,7 @@ async function seedNotifications(
       userId: recipientId,
       type: NotificationType.message,
       message: `${nameById.get(m.senderId)} vous a envoyé un message.`,
-      relatedId: m.id,
+      relatedId: m.senderId,
       read: i % 2 !== 0,
       createdAt: daysAgo(1),
     });

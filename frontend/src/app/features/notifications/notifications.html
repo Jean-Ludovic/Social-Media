@@ -1,0 +1,60 @@
+<div class="max-w-3xl mx-auto py-8 px-4">
+  <div class="flex items-center justify-between mb-6">
+    <h2 class="text-2xl font-bold text-gray-900">Notifications</h2>
+    @if (!loading() && !error() && notifications().length > 0) {
+      <button (click)="markAllRead()" [disabled]="!hasUnread() || markingAll()" class="btn-secondary disabled:opacity-50">
+        {{ markingAll() ? 'Mise à jour...' : 'Tout marquer comme lu' }}
+      </button>
+    }
+  </div>
+
+  @if (actionError()) {
+    <p class="text-sm text-red-500 mb-4">{{ actionError() }}</p>
+  }
+
+  @if (loading()) {
+    <p class="text-sm text-gray-400">Chargement...</p>
+  } @else if (error()) {
+    <div class="card text-center">
+      <p class="text-sm text-red-500">{{ error() }}</p>
+      <button (click)="load()" class="btn-secondary mt-3">Réessayer</button>
+    </div>
+  } @else if (notifications().length === 0) {
+    <div class="card text-center py-10">
+      <svg class="w-10 h-10 text-gray-300 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+      </svg>
+      <p class="text-sm text-gray-500">Aucune notification pour le moment.</p>
+    </div>
+  } @else {
+    <div class="space-y-3">
+      @for (n of notifications(); track n.id) {
+        <div (click)="open(n)"
+             class="card flex items-start gap-4 hover:shadow-md transition-shadow"
+             [class.cursor-pointer]="!!targetUrl(n)"
+             [class.bg-indigo-50]="!n.read"
+             [class.border-indigo-200]="!n.read">
+          <span class="mt-1.5 w-2.5 h-2.5 rounded-full shrink-0"
+                [class.bg-indigo-500]="!n.read"
+                [class.bg-transparent]="n.read"
+                [attr.aria-label]="n.read ? 'Lue' : 'Non lue'"></span>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-xs font-medium px-2 py-0.5 rounded-full" [class]="typeClasses(n.type)">{{ typeLabel(n.type) }}</span>
+              <span class="text-xs text-gray-400">{{ formatTime(n.createdAt) }}</span>
+            </div>
+            <p class="text-sm text-gray-800" [class.font-semibold]="!n.read">{{ n.message }}</p>
+          </div>
+          <div class="flex flex-col items-end gap-1 shrink-0">
+            @if (!n.read) {
+              <button (click)="markRead(n, $event)" [disabled]="isBusy(n.id)"
+                      class="text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-50">Marquer comme lu</button>
+            }
+            <button (click)="remove(n, $event)" [disabled]="isBusy(n.id)"
+                    class="text-xs text-red-400 hover:text-red-600 disabled:opacity-50">Supprimer</button>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

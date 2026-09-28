@@ -1,5 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/services/api';
 import { AuthService } from '../../core/services/auth';
 
@@ -15,7 +16,7 @@ interface FeedPost {
 
 @Component({
   selector: 'app-feed',
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   templateUrl: './feed.html',
   styleUrl: './feed.scss',
 })

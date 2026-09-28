@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
 import { ApiService } from '../../core/services/api';
 import { AuthService } from '../../core/services/auth';
 
@@ -29,7 +30,7 @@ interface MessageItem {
 
 @Component({
   selector: 'app-messages',
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   templateUrl: './messages.html',
   styleUrl: './messages.scss',
 })
@@ -56,14 +57,24 @@ export class Messages implements OnInit {
 
   newMessage = '';
   sending    = signal(false);
+  sendError  = signal('');
+
+  /** Partner opened by URL with no conversation yet (e.g. from the friends list). */
+  draftPartner = signal<ConversationParticipant | null>(null);
 
   private get currentUserId(): string {
     return this.auth.currentUser()?.id ?? '';
   }
 
-  activeConversation = computed(() =>
-    this.conversations().find((c) => c.partner.userId === this.activePartnerId()) ?? null,
-  );
+  activeConversation = computed<ConversationListItem | null>(() => {
+    const partnerId = this.activePartnerId();
+    const existing = this.conversations().find((c) => c.partner.userId === partnerId);
+    if (existing) return existing;
+    const draft = this.draftPartner();
+    return draft && draft.userId === partnerId
+      ? { conversationId: '', participants: [], lastMessageAt: null, partner: draft }
+      : null;
+  });
 
   ngOnInit() {
     this.loadConversations();
@@ -82,6 +93,7 @@ export class Messages implements OnInit {
             .filter((c): c is ConversationListItem => !!c.partner),
         );
         this.loadingConversations.set(false);
+        this.resolveDraftPartner();
       },
       error: () => {
         this.error.set('Impossible de charger vos conversations.');
@@ -90,7 +102,19 @@ export class Messages implements OnInit {
     });
   }
 
+  private resolveDraftPartner() {
+    const partnerId = this.activePartnerId();
+    if (!partnerId || this.conversations().some((c) => c.partner.userId === partnerId)) return;
+    if (this.draftPartner()?.userId === partnerId) return;
+
+    this.api.get<{ id: string; displayName: string }>(`/users/${partnerId}`).subscribe({
+      next:  (user) => this.draftPartner.set({ userId: user.id, displayName: user.displayName }),
+      error: () => { /* unknown user: the empty-state panel stays displayed */ },
+    });
+  }
+
   openConversation(partnerId: string) {
+    this.sendError.set('');
     this.activePartnerId.set(partnerId);
     this.loadingMessages.set(true);
     this.router.navigate(['/messages', partnerId]);
@@ -123,6 +147,7 @@ export class Messages implements OnInit {
     if (!content || !partnerId || this.sending()) return;
 
     this.sending.set(true);
+    this.sendError.set('');
     this.api.post<MessageItem>(`/messages/${partnerId}`, { content }).subscribe({
       next: (msg) => {
         this.activeMessages.update((list) => [...list, msg]);
@@ -130,7 +155,10 @@ export class Messages implements OnInit {
         this.sending.set(false);
         this.loadConversations();
       },
-      error: () => {
+      error: (err: HttpErrorResponse) => {
+        this.sendError.set(err.status === 403
+          ? 'Vous ne pouvez écrire qu\'à vos amis.'
+          : "Le message n'a pas pu être envoyé. Réessayez.");
         this.sending.set(false);
       },
     });

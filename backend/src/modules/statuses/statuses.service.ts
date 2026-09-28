@@ -1,5 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { FriendshipsService } from '../friendships/friendships.service';
 import { CreateStatusDto } from './dto/create-status.dto';
 
 const STATUS_TTL_MS = 24 * 60 * 60 * 1000;
@@ -8,34 +10,40 @@ const authorSelect = {
   user: { select: { displayName: true, avatarUrl: true } },
 } as const;
 
+type StatusWithAuthor = Prisma.StatusGetPayload<{ include: typeof authorSelect }>;
+
+function toStatusResponse({ user, ...status }: StatusWithAuthor) {
+  return { ...status, authorName: user.displayName, authorAvatarUrl: user.avatarUrl };
+}
+
+/** Statuses are visible to their author and the author's accepted friends, until they expire. */
 @Injectable()
 export class StatusesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly friendships: FriendshipsService,
+  ) {}
 
-  async findActive() {
+  async findActive(viewerId: string) {
+    const friendIds = await this.friendships.getFriendIds(viewerId);
     const statuses = await this.prisma.status.findMany({
-      where: { expiresAt: { gt: new Date() } },
+      where: { userId: { in: [viewerId, ...friendIds] }, expiresAt: { gt: new Date() } },
       include: authorSelect,
       orderBy: { createdAt: 'desc' },
     });
-    return statuses.map(({ user, ...status }) => ({
-      ...status,
-      authorName: user.displayName,
-      authorAvatarUrl: user.avatarUrl,
-    }));
+    return statuses.map(toStatusResponse);
   }
 
-  async findActiveByUser(userId: string) {
+  async findActiveByUser(viewerId: string, userId: string) {
+    if (userId !== viewerId && !(await this.friendships.areFriends(viewerId, userId))) {
+      throw new ForbiddenException('Statuses are only visible to friends');
+    }
     const statuses = await this.prisma.status.findMany({
       where: { userId, expiresAt: { gt: new Date() } },
       include: authorSelect,
       orderBy: { createdAt: 'desc' },
     });
-    return statuses.map(({ user, ...status }) => ({
-      ...status,
-      authorName: user.displayName,
-      authorAvatarUrl: user.avatarUrl,
-    }));
+    return statuses.map(toStatusResponse);
   }
 
   async create(userId: string, dto: CreateStatusDto) {
@@ -47,8 +55,7 @@ export class StatusesService {
       },
       include: authorSelect,
     });
-    const { user, ...rest } = status;
-    return { ...rest, authorName: user.displayName, authorAvatarUrl: user.avatarUrl };
+    return toStatusResponse(status);
   }
 
   async remove(id: string, userId: string): Promise<void> {

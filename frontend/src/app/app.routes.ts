@@ -52,6 +52,10 @@ export const routes: Routes = [
         path: 'lives',
         loadComponent: () => import('./features/lives/lives').then(m => m.Lives),
       },
+      {
+        path: 'notifications',
+        loadComponent: () => import('./features/notifications/notifications').then(m => m.Notifications),
+      },
     ],
   },
   { path: '**', redirectTo: '' },

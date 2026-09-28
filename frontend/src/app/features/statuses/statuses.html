@@ -27,7 +27,7 @@
   <!-- Composer -->
   @if (showComposer()) {
     <div class="card mb-6">
-      <textarea [(ngModel)]="newContent" rows="3" placeholder="Quoi de neuf ?"
+      <textarea [(ngModel)]="newContent" rows="3" maxlength="500" placeholder="Quoi de neuf ?"
                 class="input-field w-full resize-none"></textarea>
       @if (postError) {
         <p class="text-xs text-red-500 mt-2">{{ postError }}</p>
