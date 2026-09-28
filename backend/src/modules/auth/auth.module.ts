@@ -7,6 +7,7 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
 import { UsersModule } from '../users/users.module';
+import { requireJwtSecret } from './jwt-secret';
 
 @Global()
 @Module({
@@ -17,7 +18,7 @@ import { UsersModule } from '../users/users.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET', 'fallback-secret'),
+        secret: requireJwtSecret(config),
         signOptions: { expiresIn: config.get('JWT_EXPIRES_IN', '7d') as any },
       }),
     }),

@@ -224,6 +224,12 @@ Extrait `req.user` injecté par la stratégie JWT.
 6. Importer `PrismaService` dans chaque module et l'injecter dans les services
 7. Remplacer les mock data des services par de vrais appels Prisma
 
+> ⚠️ **Migrations hors développement (staging/production)** : utiliser exclusivement
+> `npm run migrate:deploy` (alias de `prisma migrate deploy`), qui applique les migrations
+> déjà versionnées sans en générer de nouvelles. Ne **jamais** exécuter `prisma migrate dev`
+> sur un environnement autre que le poste de dev : cette commande peut créer des migrations
+> ou réinitialiser la base en cas de dérive de schéma.
+
 ---
 
 ## Règles de sécurité backend
