@@ -24,7 +24,6 @@
                  [style.background]="avatarColor(s.id)">{{ initials(s.displayName) }}</div>
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium text-gray-900 truncate">{{ s.displayName }}</p>
-              <p class="text-xs text-gray-400 truncate">{{ s.email }}</p>
             </div>
             @switch (s.relationshipStatus) {
               @case ('none') {

@@ -26,7 +26,6 @@ export type RelationshipStatus = 'none' | 'accepted' | 'pending_sent' | 'pending
 export interface UserSearchResult {
   id: string;
   displayName: string;
-  email: string;
   avatarUrl: string | null;
   relationshipStatus: RelationshipStatus;
 }
@@ -145,10 +144,11 @@ export class FriendshipsService {
         id: { not: currentUserId },
         OR: [
           { displayName: { contains: query, mode: 'insensitive' } },
-          { email: { contains: query, mode: 'insensitive' } },
+          // Exact match only: a partial match would let anyone enumerate every address.
+          { email: { equals: query, mode: 'insensitive' } },
         ],
       },
-      select: { id: true, displayName: true, email: true, avatarUrl: true },
+      select: { id: true, displayName: true, avatarUrl: true },
       take: 20,
       orderBy: { displayName: 'asc' },
     });

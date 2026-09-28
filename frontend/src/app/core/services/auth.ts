@@ -9,7 +9,8 @@ interface AuthResponse { user: UserProfile; access_token: string; }
 
 export interface UserProfile {
   id: string;
-  email: string;
+  /** Only present on the current user's own account (/auth/*, /users/me), never on other users. */
+  email?: string;
   displayName: string;
   bio: string | null;
   avatarUrl: string | null;

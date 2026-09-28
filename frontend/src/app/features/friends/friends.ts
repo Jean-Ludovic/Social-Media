@@ -20,7 +20,6 @@ type RelationshipStatus = 'none' | 'accepted' | 'pending_sent' | 'pending_receiv
 interface FriendSuggestion {
   id: string;
   displayName: string;
-  email: string;
   avatarUrl: string | null;
   relationshipStatus: RelationshipStatus;
 }

@@ -161,6 +161,9 @@ export class MessagesService {
     if (!message) throw new NotFoundException('Message not found');
 
     await this.assertParticipant(message.conversationId, userId);
+    if (message.senderId === userId) {
+      throw new ForbiddenException('Only a recipient can mark a message as read');
+    }
 
     return this.prisma.message.update({
       where: { id: messageId },

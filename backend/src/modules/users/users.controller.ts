@@ -1,7 +1,7 @@
 import { Controller, Get, Patch, Param, ParseUUIDPipe, Body, UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { sanitizeUser } from './utils/sanitize-user';
+import { sanitizeUser, toPublicUser } from './utils/sanitize-user';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -17,7 +17,7 @@ export class UsersController {
 
   @Get(':id')
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return sanitizeUser(await this.usersService.findById(id));
+    return toPublicUser(await this.usersService.findById(id));
   }
 
   @Patch('me')
