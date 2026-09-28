@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { FriendshipsService } from '../friendships/friendships.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 
 const messageSelect = {
@@ -16,7 +17,16 @@ const participantsInclude = {
 
 @Injectable()
 export class MessagesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly friendships: FriendshipsService,
+  ) {}
+
+  private async assertFriends(userId: string, partnerId: string) {
+    if (!(await this.friendships.areFriends(userId, partnerId))) {
+      throw new ForbiddenException('Private messages are only allowed between accepted friends');
+    }
+  }
 
   /**
    * Returns the existing 1-to-1 conversation between the two users, or null.
@@ -40,6 +50,7 @@ export class MessagesService {
     if (userIdA === userIdB) {
       throw new ForbiddenException('Cannot start a conversation with yourself');
     }
+    await this.assertFriends(userIdA, userIdB);
 
     const existing = await this.findPrivateConversation(userIdA, userIdB);
     if (existing) return existing;
@@ -74,30 +85,44 @@ export class MessagesService {
     }));
   }
 
-  private async listMessages(conversationId: string, userId: string) {
-    await this.assertParticipant(conversationId, userId);
+  /**
+   * Read-only: never creates a conversation. History stays readable by its participants
+   * even if the friendship is no longer accepted.
+   */
+  async getMessagesWithPartner(userId: string, partnerId: string) {
+    const conversation = await this.findPrivateConversation(userId, partnerId);
+    if (!conversation) return [];
 
     return this.prisma.message.findMany({
-      where: { conversationId },
+      where: { conversationId: conversation.id },
       orderBy: { createdAt: 'asc' },
       select: messageSelect,
     });
   }
 
-  async getMessagesWithPartner(userId: string, partnerId: string) {
-    const conversation = await this.findPrivateConversation(userId, partnerId);
-    if (!conversation) return [];
-    return this.listMessages(conversation.id, userId);
-  }
-
   async sendToPartner(senderId: string, receiverId: string, dto: CreateMessageDto) {
     const conversation = await this.getOrCreatePrivateConversation(senderId, receiverId);
-    return this.send(conversation.id, senderId, dto);
+    return this.writeMessage(conversation.id, senderId, dto);
   }
 
+  /** Sending requires being a participant AND still being an accepted friend of every other participant. */
   async send(conversationId: string, senderId: string, dto: CreateMessageDto) {
-    await this.assertParticipant(conversationId, senderId);
+    const participants = await this.prisma.conversationParticipant.findMany({
+      where: { conversationId },
+      select: { userId: true },
+    });
+    if (!participants.some((p) => p.userId === senderId)) {
+      throw new ForbiddenException('Not a participant in this conversation');
+    }
+    for (const { userId } of participants) {
+      if (userId !== senderId) await this.assertFriends(senderId, userId);
+    }
 
+    return this.writeMessage(conversationId, senderId, dto);
+  }
+
+  /** No authorization here: callers must have checked participation and friendship. */
+  private async writeMessage(conversationId: string, senderId: string, dto: CreateMessageDto) {
     const [message] = await this.prisma.$transaction([
       this.prisma.message.create({
         data: { conversationId, senderId, content: dto.content },

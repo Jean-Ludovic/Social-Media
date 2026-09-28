@@ -5,7 +5,7 @@ import {
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
-import { FriendshipStatus } from '@prisma/client';
+import { FriendshipStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export interface FriendEntry {
@@ -35,6 +35,21 @@ const displayNameSelect = { select: { displayName: true } } as const;
 @Injectable()
 export class FriendshipsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /** True only if an accepted friendship exists between the two users, whichever of them sent the request. */
+  async areFriends(userIdA: string, userIdB: string): Promise<boolean> {
+    const friendship = await this.prisma.friendship.findFirst({
+      where: {
+        status: 'accepted',
+        OR: [
+          { requesterId: userIdA, receiverId: userIdB },
+          { requesterId: userIdB, receiverId: userIdA },
+        ],
+      },
+      select: { id: true },
+    });
+    return friendship !== null;
+  }
 
   async getFriendsEnriched(userId: string): Promise<FriendEntry[]> {
     const friendships = await this.prisma.friendship.findMany({
@@ -146,7 +161,21 @@ export class FriendshipsService {
     if (friendship.receiverId !== currentUserId) {
       throw new ForbiddenException('Not allowed');
     }
+    if (friendship.status !== 'pending') {
+      throw new ConflictException(`Friendship request already ${friendship.status}`);
+    }
 
-    return this.prisma.friendship.update({ where: { id }, data: { status } });
+    try {
+      // The status filter makes the transition atomic if two responses race.
+      return await this.prisma.friendship.update({
+        where: { id, status: 'pending' },
+        data: { status },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+        throw new ConflictException('Friendship request already answered');
+      }
+      throw error;
+    }
   }
 }
