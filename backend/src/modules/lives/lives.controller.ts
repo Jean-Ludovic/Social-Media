@@ -6,10 +6,12 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { LivesService } from './lives.service';
 import { CreateLiveDto } from './dto/create-live.dto';
+import { FindLivesDto } from './dto/find-lives.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -19,8 +21,8 @@ export class LivesController {
   constructor(private readonly livesService: LivesService) {}
 
   @Get()
-  findActive() {
-    return this.livesService.findActive();
+  findAll(@Query() query: FindLivesDto) {
+    return this.livesService.findAll(query.status);
   }
 
   @Get('host/:hostId')
