@@ -1,333 +1,300 @@
 # Déploiement AWS — Staging
 
-> Dernière mise à jour : 2026-09-28
-> Statut : **préparation uniquement** — aucune ressource AWS n'est encore créée.
+> Dernière mise à jour : 2026-09-29
 > Aucun secret réel ne doit figurer dans ce document ni dans le dépôt.
+
+---
+
+## 0. État actuel
+
+| Élément | État |
+|---|---|
+| Compte / identité | `466217810694`, IAM Identity Center, profil CLI `social-media-staging` (aucune clé longue durée) |
+| Région applicative | `ca-central-1` (même région que le pooler Supabase) |
+| ECR `social-media/backend` | ✅ créé — tags immuables, scan au push, conservation des 5 dernières images |
+| Image `staging-f01127a` | ✅ poussée — digest `sha256:d34594b1…6709a8`, `linux/amd64`, ~186 Mo compressés |
+| Paramètres SSM `/social-media/staging/*` | ✅ créés (voir § 3) — `CORS_ORIGIN` pas encore |
+| Service Lightsail `social-media-staging-api` | ⏸️ **non créé** — en attente d'accord (première ressource facturée) |
+| S3 / CloudFront / domaine | ⏸️ phase suivante |
+| Budget AWS | ⏸️ en attente de l'adresse email d'alerte |
+
+### Pourquoi pas App Runner
+
+App Runner n'existe pas en `ca-central-1` et **n'accepte plus de nouveaux clients depuis le
+30 avril 2026** (service en maintenance). Le successeur recommandé par AWS, ECS Express Mode,
+impose un Application Load Balancer (≈ 41 $/mois au total en `ca-central-1`), trop cher pour ce staging.
 
 ---
 
 ## 1. Architecture
 
 ```
-                    https://staging.<domaine>
-                               │
-                        ┌──────▼───────┐
-                        │  CloudFront  │  certificat ACM (us-east-1)
-                        └──┬────────┬──┘
-          behavior par défaut│        │ behavior /api/*
-          (*)                │        │ (pas de cache)
-     CloudFront Function     │        │
-     spa-fallback (viewer-   │        │
-     request)                │        │
-                        ┌────▼───┐ ┌──▼──────────────────┐
-                        │ S3     │ │ AWS App Runner      │
-                        │ privé  │ │ conteneur NestJS    │
-                        │ (OAC)  │ │ port 3000           │
-                        └────────┘ └──┬──────────────────┘
-                                      │ DATABASE_URL (pooler transaction :6543)
-                               ┌──────▼───────────────────┐
-                               │ Supabase PostgreSQL      │  (hors AWS)
-                               └──────────────────────────┘
+                 https://<distribution>.cloudfront.net  (domaine personnalisé plus tard)
+                                   │
+                            ┌──────▼───────┐
+                            │  CloudFront  │
+                            └──┬────────┬──┘
+       behavior par défaut (*) │        │ behavior /api/*  (pas de cache)
+       + fonction spa-fallback │        │
+                          ┌────▼───┐ ┌──▼──────────────────────────────┐
+                          │ S3     │ │ Lightsail Containers « Nano »   │
+                          │ privé  │ │ 0,25 vCPU / 0,5 Go, ca-central-1│
+                          │ (OAC)  │ │ image tirée d'ECR privé         │
+                          └────────┘ └──┬──────────────────────────────┘
+                                        │ DATABASE_URL (pooler transaction :6543)
+                                 ┌──────▼──────────────┐
+                                 │ Supabase PostgreSQL │  ca-central-1, hors AWS
+                                 └─────────────────────┘
 ```
 
 - **Un seul domaine public** : le navigateur appelle `/api/...` sur la même origine que la SPA
-  (`apiUrl: '/api'` dans `environment.prod.ts` et `environment.staging.ts`).
-- **Base de données** : reste sur Supabase. Aucune ressource réseau AWS (VPC, NAT) n'est nécessaire
-  pour y accéder : App Runner sort sur Internet par défaut.
-
-### Backend : App Runner (recommandé pour le staging) vs ECS Fargate
-
-| Critère | App Runner | ECS Fargate |
-|---|---|---|
-| Mise en place | Un service : image + port + variables + health check | VPC, sous-réseaux, security groups, cluster, task definition, service, **ALB** |
-| HTTPS | URL `*.awsapprunner.com` en HTTPS incluse | Via ALB + certificat ACM |
-| Origine CloudFront | Directe (domaine HTTPS stable) | ALB obligatoire (l'IP d'une tâche change) |
-| Déploiement | Blue/green automatique, retour arrière si le health check échoue | Rolling update géré par le service ECS |
-| Migrations one-off | Pas de « run task » : exécutées depuis le poste/la CI (Supabase est public) | `aws ecs run-task` avec l'image `migrate` |
-| Logs | CloudWatch automatique | CloudWatch via configuration `awslogs` |
-| Secrets | Variables issues de SSM Parameter Store / Secrets Manager | Idem (task definition) |
-| Coût minimal staging | ≈ 3–7 $/mois (voir § 11) | ≈ 30–40 $/mois (ALB ≈ 16 $ + IPv4 publiques + tâche) |
-| Évolution | Limité (pas de sidecar, peu de contrôle réseau) | Complet : c'est la cible naturelle pour la production |
-
-**Recommandation** : **App Runner** pour ce premier staging (le plus simple et le moins cher),
-en gardant **ECS Fargate + ALB** comme cible si la production demande plus de contrôle.
-
-> ⚠️ À vérifier avant de s'engager : la **disponibilité d'App Runner pour le compte et la région**.
-> App Runner n'est pas proposé dans toutes les régions (a priori pas `ca-central-1`, où se trouve
-> le pooler Supabase actuel). Chaque requête API effectuant plusieurs allers-retours SQL,
-> la région du backend doit être la plus proche possible de Supabase.
-> Si App Runner est indisponible ou trop éloigné, basculer sur ECS Fargate dans `ca-central-1`.
+  (`apiUrl: '/api'`).
+- Lightsail fournit une URL HTTPS stable (`https://<service>.<id>.ca-central-1.cs.amazonlightsail.com`),
+  utilisée comme origine CloudFront.
+- Dimensionnement mesuré : ≈ 100 Mo de RAM sous 0,25 vCPU / 512 Mo, démarrage 3–5 s.
 
 ---
 
 ## 2. Composants AWS
 
-| Composant | Rôle |
-|---|---|
-| ECR | Registre des images `backend` (runtime) et `backend-migrate` |
-| App Runner | Exécution du conteneur NestJS |
-| SSM Parameter Store (SecureString) | `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET` |
-| IAM | Rôle d'accès ECR pour App Runner + rôle d'instance (lecture des paramètres SSM) |
-| S3 (privé) | Fichiers du build Angular |
-| CloudFront + OAC | Point d'entrée HTTPS unique, cache des assets, routage `/api/*` |
-| CloudFront Function | Fallback SPA (`deploy/cloudfront/spa-fallback.js`) |
-| ACM (`us-east-1`) | Certificat du domaine de staging (obligatoirement us-east-1 pour CloudFront) |
-| CloudWatch Logs | Logs stdout/stderr du conteneur |
-| Route 53 (optionnel) | Seulement si le DNS du domaine y est hébergé |
+| Composant | Rôle | Coût |
+|---|---|---|
+| ECR `social-media/backend` | Images backend (`staging-<sha>`) | < 0,10 $/mois |
+| SSM Parameter Store | Source de vérité de la configuration et des secrets | 0 $ (paramètres standard, clé `alias/aws/ssm`) |
+| Lightsail Container Service `social-media-staging-api` | Exécution du backend (1 nœud Nano) | 7 $/mois fixe |
+| Rôle « ECR image puller » Lightsail | Géré par Lightsail, autorisé dans la politique du dépôt ECR | 0 $ |
+| S3 privé + CloudFront + fonction `spa-fallback` | Frontend et point d'entrée unique | ≈ 0 $ (niveau gratuit) |
+| AWS Budgets | Alertes de coût | 0 $ |
 
 ---
 
-## 3. Variables d'environnement du backend
+## 3. Configuration et secrets
 
-| Variable | Type | Staging | Remarque |
+Tout est dans **SSM Parameter Store**, sous `/social-media/staging/` :
+
+| Paramètre | Type | Injecté dans le conteneur | Remarque |
 |---|---|---|---|
-| `DATABASE_URL` | **secret** | pooler Supabase transaction `:6543` | Utilisée par l'application |
-| `DIRECT_URL` | **secret** | pooler Supabase session `:5432` | Utilisée **uniquement** par les migrations |
-| `JWT_SECRET` | **secret** | ≥ 32 caractères aléatoires, **différent** du secret local | Aucun fallback : l'app refuse de démarrer sans |
-| `JWT_EXPIRES_IN` | config | `7d` | |
-| `CORS_ORIGIN` | config | `https://staging.<domaine>` | Voir § 8 |
-| `PORT` | config | `3000` | Déjà défini dans l'image |
-| `NODE_ENV` | config | `production` | Déjà défini dans l'image |
+| `DATABASE_URL` | SecureString | ✅ | pooler Supabase transaction `:6543` |
+| `DIRECT_URL` | SecureString | ❌ | pooler session `:5432`, **uniquement pour les migrations** |
+| `JWT_SECRET` | SecureString | ✅ | 64 caractères aléatoires, propre au staging, jamais affiché |
+| `NODE_ENV` | String | ✅ | `production` |
+| `PORT` | String | ✅ | `3000` |
+| `JWT_EXPIRES_IN` | String | ✅ | `7d` |
+| `CORS_ORIGIN` | String | ✅ quand il existera | à créer avec l'URL CloudFront (§ 8) |
 
-Générer le `JWT_SECRET` localement et le saisir **directement** dans Parameter Store
-(jamais dans un fichier du dépôt, un ticket ou une conversation) :
+**Limite de Lightsail** : il ne lit pas SSM nativement. Le script de déploiement lit SSM et transmet
+les valeurs à Lightsail en mémoire ; elles sont alors stockées dans la configuration du service et
+lisibles par un administrateur du compte (API `get-container-services`). Acceptable pour le staging ;
+la production devra utiliser un service qui référence SSM directement (ECS).
 
-```bash
-node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
-```
+Ne jamais afficher ni écrire ces valeurs. Pour relire une valeur, préférer une comparaison en
+mémoire à un affichage.
 
 ---
 
-## 4. Build du backend (conteneur)
+## 4. Image backend
 
-`backend/Dockerfile` — multi-stage, image de base `node:24-bookworm-slim` :
+`backend/Dockerfile` — multi-stage, base `node:24-bookworm-slim` :
 
 | Stage | Contenu |
 |---|---|
-| `build` | `npm ci` → `prisma generate` → `nest build` |
-| `migrate` | Hérite de `build` (CLI Prisma + `prisma/` + `prisma.config.ts`). Commande : `npm run migrate:deploy` |
-| `prod-deps` | `npm prune --omit=dev` : dépendances runtime, en conservant le client Prisma généré |
-| `runtime` (défaut) | `node_modules` élagués + `dist/` + `package.json`, utilisateur `node` (non-root), `CMD node dist/main.js` |
+| `build` | `npm ci` → `prisma generate` (URL factice, jamais contactée) → `nest build` |
+| `migrate` | CLI Prisma + migrations ; commande `npm run migrate:deploy` |
+| `prod-deps` | `npm prune --omit=dev` (conserve le client Prisma généré) |
+| `runtime` (défaut) | `node_modules` + `dist/` + `package.json`, utilisateur `node`, `CMD node dist/main.js` |
 
-Points Prisma 7 :
+Prisma 7 + `@prisma/adapter-pg` : pas de moteur natif au runtime (compilateur de requêtes WASM).
+L'image `migrate` contient un schema engine lié statiquement (TLS intégré) : l'avertissement
+« failed to detect the libssl/openssl version » est cosmétique — `migrate status` vers Supabase a été
+vérifié depuis cette image.
 
-- Avec `@prisma/adapter-pg`, **aucun moteur natif** n'est utilisé : le client généré
-  (`node_modules/.prisma/client`) contient un compilateur de requêtes **WASM**. Pas de `binaryTargets`.
-- L'image runtime a besoin de `node_modules/.prisma/client`, `@prisma/client`, `@prisma/adapter-pg`, `pg`.
-  Elle n'a **pas** besoin de `prisma/`, `prisma.config.ts` ni de la base de données au build.
-- `prisma.config.ts` utilise `env('DIRECT_URL')`, qui échoue si la variable est absente, même pour
-  `prisma generate` : le Dockerfile passe une URL **factice** à cette seule commande (jamais contactée).
-- `npm prune --omit=dev` conserve `prisma` et `typescript`, déclarés comme peer dependencies optionnelles
-  de `@prisma/client` (≈ 378 Mo de `node_modules`). `--omit=peer` casse l'application : ne pas l'utiliser.
-  Réduction de taille possible plus tard, non bloquante.
-
-Aucun secret n'est présent dans l'image : `backend/.dockerignore` exclut `.env*` (sauf `.env.example`).
+Construire et pousser (tag = SHA Git court, jamais `latest`) :
 
 ```bash
-# depuis backend/
-docker build -t social-backend:<git-sha> .
-docker build --target migrate -t social-backend-migrate:<git-sha> .
-
-# test local (variables lues depuis .env, jamais copiées dans l'image)
-docker run --rm -p 3000:3000 --env-file .env -e JWT_SECRET -e CORS_ORIGIN=http://localhost:4200 social-backend:<git-sha>
-curl http://localhost:3000/api/health/live
-curl http://localhost:3000/api/health
+SHA=$(git rev-parse --short HEAD)
+docker build --provenance=false --sbom=false --platform linux/amd64 -t social-media-backend:staging-$SHA ./backend
+aws ecr get-login-password --profile social-media-staging --region ca-central-1 \
+  | docker login --username AWS --password-stdin 466217810694.dkr.ecr.ca-central-1.amazonaws.com
+docker tag social-media-backend:staging-$SHA 466217810694.dkr.ecr.ca-central-1.amazonaws.com/social-media/backend:staging-$SHA
+docker push 466217810694.dkr.ecr.ca-central-1.amazonaws.com/social-media/backend:staging-$SHA
 ```
+
+`--provenance=false --sbom=false` produit un manifeste d'image simple (sans index d'attestations).
+
+**Scan ECR de `staging-f01127a`** : 3 CRITICAL, 12 HIGH, 6 MEDIUM, 2 LOW — tous dans des paquets
+système Debian de l'image de base (`perl`, `util-linux`, `zlib`), pas dans l'application.
+Le scan basique ne couvre pas les dépendances npm. À traiter avant la production (image de base
+plus récente ou plus minimale, puis revalidation complète).
 
 ---
 
 ## 5. Migrations Prisma
 
-Règles :
-
 - **Jamais** `prisma migrate dev` hors du poste de développement.
-- **Uniquement** `npm run migrate:deploy` (= `prisma migrate deploy`), qui applique les migrations
-  versionnées dans `backend/prisma/migrations/` sans en créer.
-- Le conteneur runtime **ne lance jamais** les migrations au démarrage : plusieurs instances
-  pourraient démarrer en même temps (déploiement blue/green, autoscaling).
-
-Déroulé d'une release :
-
-1. Construire les deux images (`runtime` et `migrate`) avec le même tag (SHA Git).
-2. **Vérifier** l'état : `npx prisma migrate status` (lecture seule).
-3. S'il y a des migrations à appliquer, les exécuter **une seule fois**, explicitement :
-   ```bash
-   # DIRECT_URL récupérée depuis Parameter Store au moment de l'exécution, jamais écrite sur disque
-   docker run --rm -e DIRECT_URL="$(aws ssm get-parameter --name /social/staging/DIRECT_URL --with-decryption --query Parameter.Value --output text)" \
-     social-backend-migrate:<git-sha>
-   ```
-   Supabase étant accessible publiquement, cela peut se faire depuis le poste ou la CI.
-   (Avec ECS : `aws ecs run-task` utilisant l'image `migrate`.)
-4. Déployer ensuite la nouvelle image runtime.
-
-Pendant l'étape 3, l'ancienne version tourne encore : chaque migration doit rester **compatible
-avec la version précédente** (ajouter avant de supprimer, en deux releases si nécessaire).
+- Le conteneur runtime ne migre jamais au démarrage.
+- Vérifier avant toute release (lecture seule) :
+  ```bash
+  docker run --rm -e DIRECT_URL social-media-backend:migrate npx --no-install prisma migrate status
+  ```
+- Appliquer, uniquement si nécessaire et **après accord explicite** :
+  ```bash
+  docker run --rm -e DIRECT_URL social-media-backend:migrate     # CMD = npm run migrate:deploy
+  ```
+  `DIRECT_URL` est transmise par héritage d'environnement (valeur lue depuis SSM ou `.env`,
+  jamais écrite dans une commande). Supabase étant public, cela se fait depuis le poste ou la CI.
+- Déployer ensuite la nouvelle image. Chaque migration doit rester compatible avec la version
+  précédente, qui tourne encore pendant la migration.
 
 ---
 
-## 6. Frontend Angular
+## 6. Lightsail — création et déploiement
+
+Création du service (**facturation à partir de cette étape : 7 $/mois**) :
 
 ```bash
-# depuis frontend/
-npm ci
-npx ng build --configuration staging     # ou production : même apiUrl '/api'
-# sortie : dist/reseau-social/browser/  (index.html + fichiers hashés main-*.js, chunk-*.js, styles-*.css)
+aws lightsail create-container-service --profile social-media-staging --region ca-central-1 \
+  --service-name social-media-staging-api --power nano --scale 1 \
+  --private-registry-access ecrImagePullerRole={isActive=true} \
+  --tags key=project,value=social-media key=environment,value=staging
 ```
 
-Upload (les fichiers hashés sont immuables, `index.html` ne doit jamais être mis en cache longtemps) :
+Quand le service est `READY`, récupérer l'ARN du rôle de pull et l'autoriser sur le dépôt ECR :
 
 ```bash
-aws s3 sync dist/reseau-social/browser s3://<bucket-staging> \
-  --exclude index.html --cache-control "public,max-age=31536000,immutable"
-aws s3 cp dist/reseau-social/browser/index.html s3://<bucket-staging>/index.html \
-  --cache-control "no-cache"
-aws cloudfront create-invalidation --distribution-id <id> --paths "/index.html"
+aws lightsail get-container-services --profile social-media-staging --region ca-central-1 \
+  --service-name social-media-staging-api \
+  --query 'containerServices[0].privateRegistryAccess.ecrImagePullerRole.principalArn'
+# politique du dépôt : ecr:BatchGetImage + ecr:GetDownloadUrlForLayer pour ce principalArn
 ```
 
-Ne pas utiliser `--delete` à chaque release : un utilisateur ayant encore l'ancien `index.html`
-doit pouvoir charger les anciens chunks. Nettoyer les vieux fichiers périodiquement.
+Déployer une image (config lue depuis SSM, secrets jamais affichés) :
 
----
+```bash
+node deploy/lightsail/deploy-backend.mjs staging-<sha> --dry-run   # affiche la config, secrets masqués
+node deploy/lightsail/deploy-backend.mjs staging-<sha>
+```
 
-## 7. CloudFront et routage SPA
+Le script vérifie que l'image existe dans ECR, que les paramètres requis existent et que
+`JWT_SECRET` fait au moins 32 caractères. Configuration déployée :
 
-**Origines**
-
-| Origine | Configuration |
+| Réglage | Valeur |
 |---|---|
-| S3 | Bucket privé (Block Public Access activé), accès via **Origin Access Control** + bucket policy limitée à la distribution |
-| App Runner | Domaine `*.awsapprunner.com`, protocole **HTTPS only** |
+| Conteneur | `api`, port `3000` (HTTP) |
+| Variables | `NODE_ENV`, `PORT`, `JWT_EXPIRES_IN`, `DATABASE_URL`, `JWT_SECRET` (+ `CORS_ORIGIN` s'il existe) |
+| Endpoint public | conteneur `api:3000` |
+| Health check | `GET /api/health/live`, code `200`, intervalle 10 s, timeout 5 s, 2 succès / 3 échecs |
 
-**Behaviors (ordre de priorité)**
-
-| Chemin | Origine | Méthodes | Cache policy | Origin request policy | Fonction |
-|---|---|---|---|---|---|
-| `/api/*` | App Runner | toutes (GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE) | `Managed-CachingDisabled` | `Managed-AllViewerExceptHostHeader` | aucune |
-| `*` (défaut) | S3 | GET, HEAD | `Managed-CachingOptimized` | aucune | `spa-fallback` (viewer-request) |
-
-- `AllViewerExceptHostHeader` est **indispensable** : App Runner route selon l'en-tête `Host` et doit
-  recevoir son propre domaine, pas celui de CloudFront.
-- L'en-tête `Authorization` (JWT) doit atteindre le backend : c'est le **smoke test n° 4** (§ 12).
-- Viewer protocol policy : **Redirect HTTP to HTTPS** sur les deux behaviors.
-- Default root object : `index.html`.
-
-**Fallback SPA** : `deploy/cloudfront/spa-fallback.js` (runtime `cloudfront-js-2.0`), attaché
-**uniquement** au behavior par défaut. Toute URI sans extension (`/feed`, `/debates/<id>`,
-`/messages/<id>`, `/profile/<id>`, `/notifications`…) est réécrite en `/index.html` ;
-les fichiers (`*.js`, `*.css`, `favicon.ico`) passent tels quels.
-
-> ⚠️ Ne **pas** utiliser les « Custom error responses » (403/404 → `/index.html`) de CloudFront :
-> elles s'appliquent à toute la distribution et transformeraient les vraies erreurs de l'API
-> (`/api/...` → 401, 404, 503) en page HTML avec un statut 200.
-
-Limite connue : une route Angular dont le dernier segment contiendrait un point ne serait pas
-réécrite. Aucune route actuelle n'est concernée (identifiants UUID).
+Lightsail n'active la nouvelle version que si le health check passe ; sinon l'ancienne reste en service.
 
 ---
 
-## 8. CORS
-
-Avec CloudFront, le navigateur et l'API partagent la même origine : **CORS n'intervient plus**
-pour l'application. Le support CORS du backend reste en place pour un futur client sur un autre domaine.
-
-Configuration staging : `CORS_ORIGIN=https://staging.<domaine>` (origine exacte, sans `/` final).
-Sans cette variable, le backend retombe sur `http://localhost:4200` : c'est restrictif, donc sans
-risque, mais à définir explicitement.
-
----
-
-## 9. Health checks
+## 7. Health checks
 
 | Endpoint | Vérifie | Usage |
 |---|---|---|
-| `GET /api/health/live` | Le processus répond (aucune requête SQL) | **Health check App Runner / ECS / ALB** |
-| `GET /api/health` | Processus **et** PostgreSQL (`SELECT 1`) — 503 si la base est injoignable | Smoke tests, supervision |
+| `GET /api/health/live` | Le processus répond (aucune requête SQL) | **Health check Lightsail** |
+| `GET /api/health` | Processus **et** PostgreSQL — 503 si la base est injoignable | Smoke tests, supervision |
 
-Pourquoi deux endpoints : le health check de la plateforme décide du succès d'un déploiement et du
-remplacement des instances. S'il interrogeait Supabase, une indisponibilité de la base (par exemple
-la **mise en pause automatique d'un projet Supabase gratuit**) ferait échouer les déploiements ou
-recycler des conteneurs sains, sans rien réparer. Le backend démarre même si la base est injoignable.
-
-Configuration App Runner suggérée : protocole HTTP, chemin `/api/health/live`, intervalle 10 s,
-timeout 5 s, seuil sain 1, seuil non sain 5.
+Une indisponibilité de Supabase (par exemple la mise en pause d'un projet gratuit) ne doit pas
+faire échouer les déploiements ni redémarrer des conteneurs sains : le backend démarre même sans base.
 
 ---
 
-## 10. Logs
+## 8. CloudFront, S3 et CORS (phase suivante)
 
-- NestJS écrit sur stdout/stderr ; App Runner les envoie automatiquement dans CloudWatch Logs
-  (`/aws/apprunner/<service>/<id>/application`).
-- **Définir une rétention** (ex. 14 jours) : par défaut les logs n'expirent jamais.
-- Vérifié localement : aucun secret (URL de base, mot de passe, `JWT_SECRET`) n'apparaît dans les
-  logs de démarrage ni pendant les requêtes. Les erreurs de notification sont journalisées en
-  avertissement avec l'identifiant utilisateur seulement.
-- L'application gère `SIGTERM` (`enableShutdownHooks`) et ferme la connexion Prisma à l'arrêt.
+**Origines** : S3 privé via Origin Access Control ; Lightsail (URL HTTPS du service, protocole HTTPS only).
 
----
+| Chemin | Origine | Méthodes | Cache policy | Origin request policy | Fonction |
+|---|---|---|---|---|---|
+| `/api/*` | Lightsail | toutes | `Managed-CachingDisabled` | `Managed-AllViewerExceptHostHeader` | — |
+| `*` (défaut) | S3 | GET, HEAD | `Managed-CachingOptimized` | — | `spa-fallback` (viewer-request) |
 
-## 11. Coûts approximatifs (staging peu utilisé, USD/mois, hors taxes)
+- `AllViewerExceptHostHeader` : l'origine reçoit son propre nom d'hôte, pas celui de CloudFront.
+- Vérifier que l'en-tête `Authorization` atteint le backend (smoke test n° 4, § 10).
+- **Pas** de « Custom error responses » CloudFront : elles transformeraient les erreurs de l'API en HTML 200.
+- `deploy/cloudfront/spa-fallback.js` réécrit toute URI sans extension en `/index.html`.
 
-Estimations indicatives à revalider avec le calculateur AWS pour la région choisie.
+Upload du frontend :
 
-| Poste | Estimation | Hypothèse |
-|---|---|---|
-| App Runner | 3 – 7 $ | 1 instance 0,25 vCPU / 0,5–1 Go, mémoire facturée au repos, CPU seulement pendant les requêtes ; + 1 $ si déploiement automatique depuis ECR |
-| ECR | < 0,50 $ | ~10 images conservées (règle de cycle de vie), 0,10 $/Go |
-| S3 | < 0,10 $ | quelques Mo + requêtes |
-| CloudFront (+ Function) | 0 – 1 $ | reste en général dans le niveau gratuit permanent |
-| Parameter Store | 0 $ | paramètres SecureString standard (Secrets Manager : 0,40 $/secret) |
-| CloudWatch Logs | < 1 $ | quelques centaines de Mo, rétention 14 jours |
-| ACM | 0 $ | certificat public |
-| Route 53 (optionnel) | 0,50 $ | zone hébergée ; nom de domaine en plus (~10–15 $/an selon l'extension) |
-| **Total AWS** | **≈ 5 – 10 $** | |
-| *Alternative ECS Fargate + ALB* | *≈ 30 – 40 $* | *ALB ≈ 16 $, IPv4 publiques, tâche 0,25 vCPU* |
-| Supabase (hors AWS) | 0 $ ou 25 $ | Gratuit (mise en pause après inactivité) ou Pro |
+```bash
+npx ng build --configuration staging        # dans frontend/
+aws s3 sync dist/reseau-social/browser s3://<bucket> --exclude index.html \
+  --cache-control "public,max-age=31536000,immutable"
+aws s3 cp dist/reseau-social/browser/index.html s3://<bucket>/index.html --cache-control "no-cache"
+aws cloudfront create-invalidation --distribution-id <id> --paths "/index.html"
+```
 
----
+**CORS** : même origine, donc sans effet pour l'application. Une fois l'URL CloudFront connue :
 
-## 12. Ordre de mise en place (futur)
-
-0. **Décisions** : région, base Supabase de staging, domaine (voir § 14).
-1. Installer Docker, construire et tester les images en local (§ 4).
-2. Créer le dépôt **ECR** (+ règle de cycle de vie).
-3. Créer les paramètres **SSM** (`DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET`).
-4. Créer les rôles **IAM** (accès ECR pour App Runner, rôle d'instance lisant SSM).
-5. **Pousser** les images `runtime` et `migrate` (tag = SHA Git).
-6. **Migrations** si la base de staging n'est pas à jour (§ 5) — avant le premier démarrage du backend.
-7. Créer le service **App Runner** ; vérifier `https://<id>.awsapprunner.com/api/health` → 200.
-8. Demander le certificat **ACM** dans `us-east-1` (peut être lancé dès l'étape 0, validation DNS).
-9. Créer le bucket **S3** privé.
-10. Publier la **CloudFront Function** `spa-fallback`.
-11. Créer la distribution **CloudFront** : 2 origines, OAC + bucket policy, 2 behaviors, domaine + certificat.
-12. **DNS** : `staging.<domaine>` → CloudFront.
-13. **Build et upload** du frontend (§ 6), invalidation de `index.html`.
-14. Vérifier `CORS_ORIGIN` = domaine de staging (redéploiement App Runner si modifié).
-15. **Smoke tests** :
-    1. `GET /api/health/live` → 200 ; `GET /api/health` → 200, `database: "up"`
-    2. `GET /` et `GET /feed` (ouverture directe) → page Angular
-    3. `GET /api/nimporte` → **404 JSON** (et non `index.html`)
-    4. Login puis appel authentifié (`GET /api/users/me`) → 200 : l'en-tête `Authorization` traverse CloudFront
-    5. Parcours : feed, débats, messages, notifications ; rafraîchir `/debates/<id>`
-    6. Aucun `5xx` dans CloudWatch pendant le parcours
+```bash
+aws ssm put-parameter --profile social-media-staging --region ca-central-1 \
+  --name /social-media/staging/CORS_ORIGIN --type String --value "https://<distribution>.cloudfront.net"
+node deploy/lightsail/deploy-backend.mjs staging-<sha>     # redéploiement pour prendre la valeur
+```
 
 ---
 
-## 13. Retour arrière (conceptuel)
+## 9. Logs
+
+- Logs du conteneur dans Lightsail (console ou `aws lightsail get-container-log`), pas dans CloudWatch.
+- Vérifié : aucun secret dans les logs (démarrage et requêtes).
+- Arrêt propre sur `SIGTERM` (`enableShutdownHooks`, déconnexion Prisma).
+
+---
+
+## 10. Ordre de mise en place
+
+1. ✅ ECR, image `staging-f01127a`, scan.
+2. ✅ Paramètres SSM (sauf `CORS_ORIGIN`).
+3. ✅ `prisma migrate status` depuis l'image `migrate` : base à jour.
+4. ⏸️ Budget AWS (email d'alerte requis) — 15 $/mois, alertes 50 / 80 / 100 % + prévision 100 %.
+5. ⏸️ Service Lightsail + politique ECR + premier déploiement (§ 6).
+6. ⏸️ Tests sur l'URL Lightsail directe : `/api/health/live`, `/api/health`, login, `/api/debates`.
+7. S3 privé, fonction CloudFront, distribution CloudFront.
+8. `CORS_ORIGIN` + redéploiement ; build et upload du frontend.
+9. Smoke tests :
+   1. `GET /api/health/live` → 200 ; `GET /api/health` → 200, `database: "up"`
+   2. `GET /` et `GET /feed` (ouverture directe) → page Angular
+   3. `GET /api/nimporte` → **404 JSON** (et non `index.html`)
+   4. Login puis `GET /api/users/me` → 200 (l'en-tête `Authorization` traverse CloudFront)
+   5. Parcours : feed, débats, messages, notifications ; rafraîchir `/debates/<id>`
+10. Plus tard : domaine personnalisé, certificat ACM (`us-east-1`), DNS.
+
+---
+
+## 11. Coûts (USD/mois, tarifs AWS Pricing `ca-central-1`, septembre 2026)
+
+| Poste | Estimation |
+|---|---|
+| Lightsail Nano (1 nœud) | 7,00 $ |
+| ECR (≤ 5 images, 0,10 $/Go-mois) | < 0,10 $ |
+| SSM Parameter Store (standard) | 0 $ |
+| S3 + CloudFront (+ fonction) | ≈ 0 $ (niveau gratuit) |
+| Budgets | 0 $ |
+| **Total AWS** | **≈ 7 – 8 $** |
+| Route 53 (optionnel, plus tard) | 0,50 $/zone + domaine |
+| Supabase (hors AWS) | 0 $ (mise en pause possible) ou 25 $ (Pro) |
+
+Pour comparaison : ECS Express Mode ≈ 41 $/mois (Fargate ≈ 9,90 $ + ALB ≈ 20 $ + IPv4 publiques ≈ 11 $).
+
+---
+
+## 12. Retour arrière
 
 | Élément | Retour arrière |
 |---|---|
-| Backend | Redéployer l'image du tag précédent dans App Runner (images conservées dans ECR) |
-| Frontend | Ré-uploader le build précédent (conserver les artefacts par SHA) ou restaurer via le versioning S3, puis invalider `/index.html` |
-| Base de données | Pas de retour arrière automatique des migrations : correction par une nouvelle migration (d'où la règle de compatibilité du § 5) |
+| Backend | `node deploy/lightsail/deploy-backend.mjs staging-<sha précédent>` (tags immuables, 5 images conservées) |
+| Frontend | Ré-uploader le build précédent, invalider `/index.html` |
+| Base de données | Pas de retour arrière automatique : correction par une nouvelle migration (§ 5) |
+| Tout le staging | Supprimer le service Lightsail arrête la facturation principale |
 
 ---
 
-## 14. Décisions à prendre avant la mise en place
+## 13. Points ouverts
 
-1. **Région** du backend (proximité avec Supabase `ca-central-1` vs disponibilité d'App Runner).
-2. **Base de staging** : réutiliser le projet Supabase actuel (données de développement) ou créer
-   un projet dédié (base vide → `migrate:deploy`, puis données de test à définir).
-3. **Plan Supabase** : le plan gratuit met le projet en pause après inactivité (staging indisponible).
-4. **Domaine** : nom de staging et hébergement DNS (Route 53 ou fournisseur actuel).
-5. **Accès direct à l'URL App Runner** : elle reste publique et contourne CloudFront ; acceptable en
-   staging, à restreindre plus tard (en-tête secret vérifié par le backend, ou ECS + ALB privé).
+1. Adresse email des alertes budgétaires.
+2. Vulnérabilités de l'image de base (§ 4) avant la production.
+3. Stockage des secrets dans la configuration Lightsail (§ 3) : à revoir pour la production.
+4. Plan Supabase : le plan gratuit met le projet en pause (staging indisponible).
+5. Domaine personnalisé et DNS.
+6. L'URL Lightsail directe reste publique et contourne CloudFront ; à restreindre avant la production.
